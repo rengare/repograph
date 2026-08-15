@@ -1,0 +1,11 @@
+[package]
+name = "gv-gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gv-config.workspace = true
+gv-graph.workspace = true
+gv-layout.workspace = true
+
+egui.workspace = true

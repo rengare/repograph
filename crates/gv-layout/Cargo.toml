@@ -1,0 +1,14 @@
+[package]
+name = "gv-layout"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gv-graph.workspace = true
+# The octree's flattened cell array is uploaded verbatim by gv-layout-gpu, so
+# the cell type has to be Pod here rather than being mirrored there.
+bytemuck.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+gv-graph = { workspace = true, features = ["testing"] }

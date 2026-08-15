@@ -1,0 +1,21 @@
+[package]
+name = "gv-render"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gv-config.workspace = true
+gv-gpu.workspace = true
+gv-graph.workspace = true
+
+anyhow.workspace = true
+bytemuck.workspace = true
+glam.workspace = true
+log.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+
+[dev-dependencies]
+# Validate the WGSL offline: shader compilation otherwise only happens when a
+# window builds the pipelines, which the headless tests never do.
+naga = { version = "29.0.4", features = ["wgsl-in"] }

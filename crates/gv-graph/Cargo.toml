@@ -1,0 +1,14 @@
+[package]
+name = "gv-graph"
+version.workspace = true
+edition.workspace = true
+
+[features]
+# Exposes `gv_graph::testing`, the small fixture graphs the layout crates
+# build their tests on. Off by default so it stays out of release builds.
+testing = []
+
+[dependencies]
+anyhow.workspace = true
+bytemuck.workspace = true
+rand.workspace = true

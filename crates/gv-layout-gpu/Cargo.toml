@@ -1,0 +1,17 @@
+[package]
+name = "gv-layout-gpu"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gv-gpu.workspace = true
+gv-graph.workspace = true
+gv-layout.workspace = true
+
+anyhow.workspace = true
+bytemuck.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+gv-graph = { workspace = true, features = ["testing"] }
+pollster.workspace = true

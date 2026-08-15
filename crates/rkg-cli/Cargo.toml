@@ -1,0 +1,16 @@
+[package]
+name = "rkg-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rkg"
+path = "src/main.rs"
+
+[dependencies]
+rkg-core.workspace = true
+rkg-ingest.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "rkg-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gv-graph.workspace = true
+
+anyhow.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true

@@ -1,0 +1,31 @@
+[package]
+name = "gv-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "graphvisualizer"
+path = "src/bin/graphvisualizer.rs"
+
+[dependencies]
+gv-config.workspace = true
+gv-gpu.workspace = true
+gv-graph.workspace = true
+gv-gui.workspace = true
+gv-layout.workspace = true
+gv-layout-gpu.workspace = true
+gv-render.workspace = true
+
+anyhow.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+egui-winit.workspace = true
+env_logger.workspace = true
+glam.workspace = true
+log.workspace = true
+pollster.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+
+[dev-dependencies]
+gv-graph = { workspace = true, features = ["testing"] }
