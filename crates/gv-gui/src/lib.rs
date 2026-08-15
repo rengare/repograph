@@ -196,6 +196,8 @@ pub struct GuiActions {
     pub focus_node: Option<usize>,
     /// A kind-visibility checkbox changed; rebuild the scene visibility mask.
     pub filters_changed: bool,
+    /// The selected-node neighborhood depth changed and should be persisted.
+    pub selection_depth_changed: bool,
     /// The inspector's Close button was clicked; clear the inspected node.
     pub close_inspect: bool,
 }
@@ -212,6 +214,8 @@ pub const MAX_MOVE_SPEED: f32 = 5000.0;
 /// Bounds for the mouse-wheel zoom multiplier.
 pub const MIN_WHEEL_ZOOM: f32 = 0.1;
 pub const MAX_WHEEL_ZOOM: f32 = 100.0;
+/// Keep selection traversal bounded on large repository graphs.
+pub const MAX_SELECTION_DEPTH: u32 = 8;
 
 /// Width of each edge-anchored panel window.
 const PANEL_WIDTH: f32 = 290.0;
@@ -294,6 +298,16 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
                     params.area = params.area.max(MIN_AREA);
                 }
                 ui.add(egui::DragValue::new(&mut params.gravity).prefix("gravity: "));
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut config.selection_depth)
+                            .range(0..=MAX_SELECTION_DEPTH)
+                            .prefix("selection depth: "),
+                    )
+                    .changed()
+                {
+                    actions.selection_depth_changed = true;
+                }
             });
 
             section(ui, "Algorithms", |ui| {

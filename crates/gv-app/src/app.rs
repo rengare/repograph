@@ -1,5 +1,7 @@
 //! The winit `ApplicationHandler` and the frame loop.
 
+use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -58,6 +60,8 @@ pub struct App {
     /// The last edge clicked and which endpoint was last jumped to (0 = from,
     /// 1 = to), so re-clicking the same edge hops to the other end.
     edge_jump: Option<(usize, u8)>,
+    /// Settings file to update when the force-layout controls change.
+    settings_path: Option<PathBuf>,
 
     active: Option<Active>,
     input: InputState,
@@ -110,11 +114,15 @@ fn project_labels(
     camera: &Camera,
     graph: &GraphData,
     visible: &KindVisibility,
+    selected: Option<usize>,
+    selection_depth: u32,
     width: f32,
     height: f32,
     pixels_per_point: f32,
 ) -> Vec<(egui::Pos2, String)> {
     let view_proj = camera.projection_matrix() * camera.view_matrix();
+    let selected_neighborhood =
+        selected.map(|selected| selected_neighborhood(graph, selected, selection_depth));
     let mut out = Vec::new();
     for (i, node) in graph.nodes.iter().enumerate() {
         let Some(meta) = graph.meta.get(i) else {
@@ -122,6 +130,14 @@ fn project_labels(
         };
         // Hidden kinds carry no label, matching the scene.
         if meta.name.is_empty() || !visible.allows(meta.kind) {
+            continue;
+        }
+        // When the selection dims the rest of the graph, omit those nodes'
+        // labels too so the selected neighborhood remains readable.
+        if selected_neighborhood
+            .as_ref()
+            .is_some_and(|neighborhood| !neighborhood[i])
+        {
             continue;
         }
         let clip = view_proj
@@ -146,6 +162,32 @@ fn project_labels(
         }
     }
     out
+}
+
+/// Marks nodes reachable from `selected` within `depth` undirected edge hops.
+fn selected_neighborhood(graph: &GraphData, selected: usize, depth: u32) -> Vec<bool> {
+    let mut neighborhood = vec![false; graph.nodes.len()];
+    if selected >= neighborhood.len() {
+        return neighborhood;
+    }
+    neighborhood[selected] = true;
+    let mut pending = VecDeque::from([(selected, 0)]);
+    while let Some((node, distance)) = pending.pop_front() {
+        if distance == depth {
+            continue;
+        }
+        for edge in &graph.edges {
+            let (from, to) = (edge.from as usize, edge.to as usize);
+            let neighbor = if from == node { Some(to) } else if to == node { Some(from) } else { None };
+            if let Some(neighbor) = neighbor.filter(|&neighbor| neighbor < neighborhood.len()) {
+                if !neighborhood[neighbor] {
+                    neighborhood[neighbor] = true;
+                    pending.push_back((neighbor, distance + 1));
+                }
+            }
+        }
+    }
+    neighborhood
 }
 
 /// Distance from point `p` to the segment `a`–`b`, all in screen pixels.
@@ -201,6 +243,9 @@ impl App {
         seed_options: SeedOptions,
     ) -> Result<Self> {
         let params = LayoutParams {
+            speed: config.speed,
+            area: config.area,
+            gravity: config.gravity,
             three_d: config.graph_type_3d,
             ..Default::default()
         };
@@ -222,6 +267,7 @@ impl App {
             cursor: (0.0, 0.0),
             inspected: None,
             edge_jump: None,
+            settings_path: None,
             active: None,
             input: InputState::default(),
             last_frame: None,
@@ -230,6 +276,27 @@ impl App {
             frames_since_report: 0,
             last_report: None,
         })
+    }
+
+    pub fn set_settings_path(&mut self, path: PathBuf) {
+        self.settings_path = Some(path);
+    }
+
+    /// Copies changed graph controls into settings without touching unrelated keys.
+    fn persist_graph_settings(&mut self, selection_depth_changed: bool) -> Result<()> {
+        let layout_changed = self.config.speed != self.params.speed
+            || self.config.area != self.params.area
+            || self.config.gravity != self.params.gravity;
+        if !layout_changed && !selection_depth_changed {
+            return Ok(());
+        }
+        self.config.speed = self.params.speed;
+        self.config.area = self.params.area;
+        self.config.gravity = self.params.gravity;
+        if let Some(path) = &self.settings_path {
+            self.config.save_graph_settings(path)?;
+        }
+        Ok(())
     }
 
     /// Rebuilds the active layout after the picker changes.
@@ -355,21 +422,10 @@ impl App {
     /// selected node and every node sharing an edge with it, `DIM_FACTOR` for
     /// the rest.
     fn dim_mask(&self, idx: usize) -> Vec<f32> {
-        let count = self.graph.nodes.len();
-        let mut mask = vec![DIM_FACTOR; count];
-        if idx < count {
-            mask[idx] = 1.0;
-        }
-        // Neighbours reachable across a single edge in either direction.
-        for e in &self.graph.edges {
-            let (from, to) = (e.from as usize, e.to as usize);
-            if from == idx && to < count {
-                mask[to] = 1.0;
-            } else if to == idx && from < count {
-                mask[from] = 1.0;
-            }
-        }
-        mask
+        selected_neighborhood(&self.graph, idx, self.config.selection_depth)
+            .into_iter()
+            .map(|selected| if selected { 1.0 } else { DIM_FACTOR })
+            .collect()
     }
 
     /// Restores full brightness to every node and edge.
@@ -725,6 +781,7 @@ impl App {
             GuiActions::default()
         };
         self.reconcile_labels_and_update();
+        self.persist_graph_settings(actions.selection_depth_changed)?;
 
         let active = self.active.as_mut().expect("active checked above");
         active.context.queue.submit([encoder.finish()]);
@@ -762,6 +819,8 @@ impl App {
                 &self.camera,
                 &self.graph,
                 &self.search.visible,
+                self.inspected,
+                self.config.selection_depth,
                 width as f32,
                 height as f32,
                 ppp,
@@ -978,6 +1037,43 @@ mod tests {
         assert_eq!(params.gravity, 1.0);
     }
 
+    #[test]
+    fn settings_initialise_the_layout_parameters() {
+        let config = AppConfig { speed: 42.0, area: 12.5, gravity: -3.0, ..Default::default() };
+        let app = App::new(
+            config,
+            gv_graph::testing::triangle(),
+            LayoutChoice::FrCpu,
+            SeedOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(app.params.speed, 42.0);
+        assert_eq!(app.params.area, 12.5);
+        assert_eq!(app.params.gravity, -3.0);
+    }
+
+    #[test]
+    fn changed_layout_parameters_are_saved_to_settings() {
+        let path = std::env::temp_dir().join(format!("gv-app-settings-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let mut app = app_of(gv_graph::testing::triangle());
+        app.set_settings_path(path.clone());
+        app.params.speed = 42.0;
+        app.params.area = 12.5;
+        app.params.gravity = -3.0;
+        app.config.selection_depth = 3;
+
+        app.persist_graph_settings(true).unwrap();
+
+        let saved = AppConfig::load(&path).unwrap();
+        assert_eq!(
+            (saved.speed, saved.area, saved.gravity, saved.selection_depth),
+            (42.0, 12.5, -3.0, 3)
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
     fn app_of(graph: GraphData) -> App {
         App::new(
             AppConfig::default(),
@@ -1106,6 +1202,10 @@ mod tests {
         assert_eq!(mask0[0], 1.0);
         assert_eq!(mask0[1], 1.0);
         assert_eq!(mask0[2], DIM_FACTOR);
+
+        app.config.selection_depth = 2;
+        let nested = app.dim_mask(0);
+        assert_eq!(nested, vec![1.0, 1.0, 1.0]);
     }
 
     #[test]
@@ -1129,7 +1229,7 @@ mod tests {
         };
 
         let all = KindVisibility::default();
-        let labels = project_labels(&camera, &graph, &all, 800.0, 600.0, 1.0);
+        let labels = project_labels(&camera, &graph, &all, None, 1, 800.0, 600.0, 1.0);
 
         // Only the origin node is in front of the camera.
         assert_eq!(labels.len(), 1);
@@ -1137,7 +1237,7 @@ mod tests {
 
         // Hiding files removes both labels.
         let no_files = KindVisibility { file: false, ..Default::default() };
-        assert!(project_labels(&camera, &graph, &no_files, 800.0, 600.0, 1.0).is_empty());
+        assert!(project_labels(&camera, &graph, &no_files, None, 1, 800.0, 600.0, 1.0).is_empty());
         // It projects to roughly the centre of an 800x600 view.
         assert!((labels[0].0.x - 400.0).abs() < 1.0, "x={}", labels[0].0.x);
         assert!((labels[0].0.y - (300.0 - LABEL_OFFSET)).abs() < 1.0, "y={}", labels[0].0.y);
@@ -1155,6 +1255,58 @@ mod tests {
 
         assert!(!app.config.is_update_on, "layout should stop");
         assert!(app.label_sync_pending, "positions should be pulled");
+    }
+
+    #[test]
+    fn labels_follow_the_selected_node_and_its_neighbours() {
+        use gv_graph::{Edge, Node, NodeCategory, NodeMeta};
+
+        let mut camera = Camera::default();
+        camera.resize(800, 600);
+        let graph = GraphData {
+            nodes: vec![
+                Node { position: [0.0, 0.0, 0.0, 1.0], ..Default::default() },
+                Node { position: [100.0, 0.0, 0.0, 1.0], ..Default::default() },
+                Node { position: [200.0, 0.0, 0.0, 1.0], ..Default::default() },
+            ],
+            edges: vec![Edge { from: 0, to: 1 }, Edge { from: 1, to: 2 }],
+            meta: ["selected", "neighbour", "dimmed"]
+                .into_iter()
+                .map(|name| NodeMeta {
+                    name: name.into(),
+                    kind: NodeCategory::File,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+
+        let labels = project_labels(
+            &camera,
+            &graph,
+            &KindVisibility::default(),
+            Some(0),
+            1,
+            800.0,
+            600.0,
+            1.0,
+        );
+        let names: Vec<_> = labels.into_iter().map(|(_, name)| name).collect();
+
+        assert_eq!(names, ["selected", "neighbour"]);
+
+        let nested = project_labels(
+            &camera,
+            &graph,
+            &KindVisibility::default(),
+            Some(0),
+            2,
+            800.0,
+            600.0,
+            1.0,
+        );
+        let nested_names: Vec<_> = nested.into_iter().map(|(_, name)| name).collect();
+        assert_eq!(nested_names, ["selected", "neighbour", "dimmed"]);
     }
 
     #[test]
@@ -1239,7 +1391,7 @@ mod tests {
         let camera = Camera::default();
         let graph = gv_graph::testing::triangle(); // no meta
         let all = KindVisibility::default();
-        assert!(project_labels(&camera, &graph, &all, 800.0, 600.0, 1.0).is_empty());
+        assert!(project_labels(&camera, &graph, &all, None, 1, 800.0, 600.0, 1.0).is_empty());
     }
 
     #[test]

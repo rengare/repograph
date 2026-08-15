@@ -5,17 +5,18 @@ compact, token-cheap context) or **browse it in an interactive 3D viewer** (sear
 and symbols, colour by kind, walk the import/reference web).
 
 ![repograph visualizing its own codebase — files, docs, and symbols with labels on](docs/screenshot.png)
+![select node and dim the rest, show only connected neighbors](docs/select_and_dim.png)
 
 Two things live here:
 
 - **The knowledge graph** — a scanner (`rkg`) that walks a repo and builds a directed,
   typed graph of directories, files, docs, doc-sections and code symbols
   (functions, structs, classes, …), with `contains` / `imports` / `links` / `defines` /
-  `references` edges. It answers questions like *"what does this file import?"*,
-  *"who references this symbol?"*, and *"give me a budgeted neighbourhood around this
-  seed"* — as text, JSON, or over **MCP** so Claude Code can call it live.
+  `references` edges. It answers questions like _"what does this file import?"_,
+  _"who references this symbol?"_, and _"give me a budgeted neighbourhood around this
+  seed"_ — as text, JSON, or over **MCP** so Claude Code can call it live.
 - **The viewer** — a GPU force-directed 3D graph browser (a fork of
-  [graphvisualizer-rs](#credits)) extended to render the graph *with its real metadata*:
+  [graphvisualizer-rs](#credits)) extended to render the graph _with its real metadata_:
   nodes coloured by kind, a search panel, per-kind visibility filters, node labels, and
   click-to-inspect / click-an-edge-to-walk-it.
 
@@ -106,13 +107,13 @@ rkg mcp install <opencode|claude-code|codex|junie>
 
 Query subcommands:
 
-| Command | What it does |
-| --- | --- |
-| `find <query> [--kind dir\|file\|doc\|sec\|sym]` | Substring search over name/path/id. |
-| `neighbors <id> [--depth N] [--direction out\|in\|both] [--edge-kind K ...]` | Bounded traversal. |
-| `context <seed> [--budget N]` | A ranked, **token-budgeted** neighbourhood — the compact bundle to read instead of whole files. Prefers semantic edges (imports/references) over directory containment. |
-| `subgraph <id ...>` | The induced subgraph over a set of ids. |
-| `path <a> <b>` | Shortest (undirected) path between two nodes. |
+| Command                                                                      | What it does                                                                                                                                                            |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `find <query> [--kind dir\|file\|doc\|sec\|sym]`                             | Substring search over name/path/id.                                                                                                                                     |
+| `neighbors <id> [--depth N] [--direction out\|in\|both] [--edge-kind K ...]` | Bounded traversal.                                                                                                                                                      |
+| `context <seed> [--budget N]`                                                | A ranked, **token-budgeted** neighbourhood — the compact bundle to read instead of whole files. Prefers semantic edges (imports/references) over directory containment. |
+| `subgraph <id ...>`                                                          | The induced subgraph over a set of ids.                                                                                                                                 |
+| `path <a> <b>`                                                               | Shortest (undirected) path between two nodes.                                                                                                                           |
 
 Node ids are stable and kind-prefixed: `dir:src`, `file:src/loader.rs`,
 `doc:README.md`, `sec:README.md#format`, `sym:src/loader.rs::parse`. Add `--json`
@@ -126,17 +127,17 @@ their **container** (`impl Csr`, a class, a namespace, a module), the **variable
 scope** (parameters + local declarations), and a line span.
 **Imports/includes** become cross-file edges, resolved per language:
 
-| Language | Files | Symbols | Import edges |
-| --- | --- | --- | --- |
-| Rust | `.rs` | ✓ | `mod` / `use crate::` |
-| JavaScript | `.js .jsx .mjs .cjs` | ✓ | `import` / `export … from` / `require` |
-| TypeScript | `.ts .mts .cts .tsx` | ✓ | `import` / `export … from` / `require` |
-| Python | `.py .pyi` | ✓ | `import a.b`, `from .mod import x` (incl. `__init__.py`) |
-| C | `.c` | ✓ | `#include "…"` (local; `<…>` skipped) |
-| C++ | `.cpp .cc .cxx .hpp .hh .hxx .h` | ✓ | `#include "…"` (`.h` parsed as C++) |
-| Java | `.java` | ✓ | `import a.b.C;` → `a/b/C.java` |
-| Kotlin | `.kt .kts` | ✓ | `import a.b.C` → `a/b/C.kt` |
-| C# | `.cs` | ✓ | `using A.B.C;` → `A/B/C.cs` (best-effort) |
+| Language   | Files                            | Symbols | Import edges                                             |
+| ---------- | -------------------------------- | ------- | -------------------------------------------------------- |
+| Rust       | `.rs`                            | ✓       | `mod` / `use crate::`                                    |
+| JavaScript | `.js .jsx .mjs .cjs`             | ✓       | `import` / `export … from` / `require`                   |
+| TypeScript | `.ts .mts .cts .tsx`             | ✓       | `import` / `export … from` / `require`                   |
+| Python     | `.py .pyi`                       | ✓       | `import a.b`, `from .mod import x` (incl. `__init__.py`) |
+| C          | `.c`                             | ✓       | `#include "…"` (local; `<…>` skipped)                    |
+| C++        | `.cpp .cc .cxx .hpp .hh .hxx .h` | ✓       | `#include "…"` (`.h` parsed as C++)                      |
+| Java       | `.java`                          | ✓       | `import a.b.C;` → `a/b/C.java`                           |
+| Kotlin     | `.kt .kts`                       | ✓       | `import a.b.C` → `a/b/C.kt`                              |
+| C#         | `.cs`                            | ✓       | `using A.B.C;` → `A/B/C.cs` (best-effort)                |
 
 Markdown (`.md .markdown`) headings become sections and `[links](…)` become edges;
 every other text file is indexed as a plain `file` node. Adding a language is a single
@@ -159,7 +160,7 @@ kind and the browsing tools light up.
 - **Look:** arrow keys, or hold the **right mouse button** and drag.
 - **Zoom:** mouse wheel. **Reset view:** `Space`. **Quit:** `Esc`.
 - **Left-click a node** → open its inspector (kind, path, container, signature, doc)
-  and bring it to the foreground: the node and its edge-connected neighbours stay
+  and bring it to the foreground: the node and its configured-depth neighbours stay
   lit while the rest of the graph dims. Click the same node again to deselect and
   restore full brightness.
 - **Left-click an edge** → jump to one endpoint; click the same edge again to hop to
@@ -168,13 +169,16 @@ kind and the browsing tools light up.
 **Panels** (left = browsing, right = configuration):
 
 - **Search** — find nodes by name/path, filter results by kind, and click a result to
-  fly to it. The **show:** checkboxes hide whole kinds (their nodes, edges *and* labels).
+  fly to it. The **show:** checkboxes hide whole kinds (their nodes, edges _and_ labels).
 - **Labels** — draw each node's name above it. Hidden while a layout is running; the
   positions snap on when you stop it (or when you tick Labels mid-run).
 - **Algorithms** — pick a layout (`F-R gpu`, `gpu barnes-hut`, `cpu`, …), toggle
   `Update` to run it, `Reseed` to restart, `3d`/`Show edge` display options.
 - **System settings** — background colour, **move speed** (W/S/A/D/R/F) and
   **wheel zoom** speed, and `Reset camera`. Speeds persist in `settings.json`.
+- **Graph settings** — layout **speed**, **area**, and **gravity**. Changes persist
+  to `settings.json` and apply to both windowed and headless layouts. **Selection
+  depth** controls how many edge hops stay bright and labeled after selecting a node.
 
 ## MCP server — query the graph from coding agents
 
@@ -192,9 +196,9 @@ no separate `rkg build` step is required.
   "mcpServers": {
     "repograph": {
       "command": "rkg-mcp",
-      "args": ["--graph", ".rkg/graph.json"]
-    }
-  }
+      "args": ["--graph", ".rkg/graph.json"],
+    },
+  },
 }
 ```
 
@@ -258,8 +262,9 @@ method, …). Non-code, non-markdown files are `file` nodes with no symbols.
   `index  id  name  kind  path  span  signature  symbol_kind  container  doc  locals`.
   Everything past `path` is optional, so a narrower/older sidecar still loads.
 - **`settings.json`** — viewer configuration: window geometry, vsync, `3d`, node-size
-  range, clear colour, **move / wheel-zoom speed**, and the default `edgeInput` /
-  `nodesInput`. All keys are optional; a missing file falls back to defaults.
+  range, clear colour, **move / wheel-zoom speed**, layout `speed` / `area` /
+  `gravity`, `selectionDepth`, and the default `edgeInput` / `nodesInput`. All keys
+  are optional; a missing file falls back to defaults.
 
 ## Credits
 

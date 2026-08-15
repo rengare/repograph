@@ -31,6 +31,7 @@ pub fn run(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
+    let settings_path = settings_path(&cli);
     let config = load_config(&cli)?;
     let options = seed_options(&config, cli.seed.unwrap_or(0));
     let mut graph = load_graph(&config, options)?;
@@ -39,6 +40,9 @@ pub fn run(cli: Cli) -> Result<()> {
     match cli.headless_steps {
         Some(steps) => {
             let params = LayoutParams {
+                speed: config.speed,
+                area: config.area,
+                gravity: config.gravity,
                 three_d: config.graph_type_3d,
                 ..Default::default()
             };
@@ -46,7 +50,7 @@ pub fn run(cli: Cli) -> Result<()> {
             print!("{report}");
             Ok(())
         }
-        None => run_windowed(config, graph, choice, options),
+        None => run_windowed(config, graph, choice, options, settings_path),
     }
 }
 
@@ -55,8 +59,10 @@ fn run_windowed(
     graph: GraphData,
     choice: gv_gui::LayoutChoice,
     options: SeedOptions,
+    settings_path: PathBuf,
 ) -> Result<()> {
     let mut app = App::new(config, graph, choice, options)?;
+    app.set_settings_path(settings_path);
 
     let event_loop =
         winit::event_loop::EventLoop::new().context("creating the winit event loop")?;
@@ -74,10 +80,7 @@ fn run_windowed(
 /// malformed one is, and so is a missing file the user named explicitly.
 pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     let explicit = cli.settings.is_some();
-    let path: PathBuf = cli
-        .settings
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_SETTINGS));
+    let path = settings_path(cli);
 
     let mut config = if explicit || path.exists() {
         AppConfig::load(&path)?
@@ -88,6 +91,12 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
 
     cli.apply_to(&mut config);
     Ok(config)
+}
+
+fn settings_path(cli: &Cli) -> PathBuf {
+    cli.settings
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_SETTINGS))
 }
 
 /// The initial scatter for this configuration.

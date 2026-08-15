@@ -32,6 +32,14 @@ pub struct AppConfig {
     pub show_edge: bool,
     pub is_update_on: bool,
 
+    /// Force-layout parameters, shared by the GUI and headless runs.
+    pub speed: f32,
+    pub area: f32,
+    pub gravity: f32,
+    /// How many edge hops remain highlighted after selecting a node. Zero keeps
+    /// only the selected node visible at full brightness.
+    pub selection_depth: u32,
+
     /// Draw each node's name (from the knowledge-graph sidecar) as a text label
     /// above it. Off by default; a no-op for anonymous edge-list graphs.
     pub show_labels: bool,
@@ -71,6 +79,10 @@ impl Default for AppConfig {
             graph_type_3d: true,
             show_edge: false,
             is_update_on: false,
+            speed: 100.0,
+            area: 1000.0,
+            gravity: 1.0,
+            selection_depth: 1,
             show_labels: false,
             node_size_range_start: 10.0,
             node_size_range_end: 30.0,
@@ -91,6 +103,32 @@ impl AppConfig {
             .with_context(|| format!("reading settings from {}", path.display()))?;
         serde_json::from_str(&text)
             .with_context(|| format!("parsing settings from {}", path.display()))
+    }
+
+    /// Updates graph controls while retaining settings this version does not
+    /// model, such as the legacy shader-path keys.
+    pub fn save_graph_settings(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".to_owned(),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("reading settings from {}", path.display()))
+            }
+        };
+        let mut json: serde_json::Value = serde_json::from_str(&text)
+            .with_context(|| format!("parsing settings from {}", path.display()))?;
+        let settings = json
+            .as_object_mut()
+            .context("settings JSON must be an object")?;
+        settings.insert("speed".into(), self.speed.into());
+        settings.insert("area".into(), self.area.into());
+        settings.insert("gravity".into(), self.gravity.into());
+        settings.insert("selectionDepth".into(), self.selection_depth.into());
+        let json = serde_json::to_string_pretty(&json)?;
+        std::fs::write(path, json)
+            .with_context(|| format!("writing settings to {}", path.display()))
     }
 
     /// Clear colour normalised to the 0..=1 range wgpu expects.
@@ -138,6 +176,10 @@ mod tests {
         assert_eq!(config.width, 1280);
         assert!(config.graph_type_3d);
         assert_eq!(config.node_size_range_end, 30.0);
+        assert_eq!(config.speed, 100.0);
+        assert_eq!(config.area, 1000.0);
+        assert_eq!(config.gravity, 1.0);
+        assert_eq!(config.selection_depth, 1);
         assert_eq!(config.edge_input, PathBuf::from("array.edges"));
     }
 
@@ -145,5 +187,30 @@ mod tests {
     fn empty_object_yields_defaults() {
         let config: AppConfig = serde_json::from_str("{}").expect("should parse");
         assert_eq!(config, AppConfig::default());
+    }
+
+    #[test]
+    fn saving_graph_settings_preserves_unrelated_settings() {
+        let path = std::env::temp_dir().join(format!("gv-config-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let config = AppConfig {
+            speed: 42.0,
+            area: 12.5,
+            gravity: -3.0,
+            selection_depth: 3,
+            ..Default::default()
+        };
+        std::fs::write(&path, r#"{ "legacyShader": "nodes" }"#).unwrap();
+
+        config.save_graph_settings(&path).unwrap();
+
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved["legacyShader"], "nodes");
+        assert_eq!(saved["speed"], 42.0);
+        assert_eq!(saved["area"], 12.5);
+        assert_eq!(saved["gravity"], -3.0);
+        assert_eq!(saved["selectionDepth"], 3);
+        std::fs::remove_file(path).unwrap();
     }
 }
