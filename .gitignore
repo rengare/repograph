@@ -1,2 +1,4 @@
 /target
 /.rkg/
+/web/pkg/
+/web/examples/

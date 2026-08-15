@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>repograph viewer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <section id="import-panel" class="panel import">
+        <p class="eyebrow">REPOGRAPH / BROWSER</p>
+        <h1>Open a repository graph.</h1>
+        <p>Choose the files created by <code>rkg export</code>. They are parsed locally and never uploaded.</p>
+        <label>Edges <input id="edges-file" type="file" accept=".edges,.txt,text/plain" required /></label>
+        <label>Nodes <input id="nodes-file" type="file" accept=".tsv,text/tab-separated-values,text/plain" required /></label>
+        <div class="actions"><button id="open-graph" type="button">Open selected files</button><button id="open-example" type="button" class="secondary">Open bundled example</button></div>
+        <p id="import-error" role="alert"></p>
+      </section>
+
+      <section id="viewer" hidden>
+        <canvas id="graph-canvas"></canvas>
+        <aside class="panel controls">
+          <p class="eyebrow">LOCAL GRAPH</p>
+          <p id="stats"></p>
+          <label>Find <input id="search" type="search" placeholder="name or path" /></label>
+          <select id="search-results" size="7" aria-label="Search results"></select>
+          <label>Selection depth <input id="selection-depth" type="range" min="0" max="8" value="1" /></label>
+          <label><input id="show-labels" type="checkbox" /> Labels</label>
+          <fieldset>
+            <legend>Visible kinds</legend>
+            <label><input id="show-dir" type="checkbox" checked /> Directories</label>
+            <label><input id="show-file" type="checkbox" checked /> Files</label>
+            <label><input id="show-doc" type="checkbox" checked /> Docs</label>
+            <label><input id="show-section" type="checkbox" checked /> Sections</label>
+            <label><input id="show-symbol" type="checkbox" checked /> Symbols</label>
+          </fieldset>
+        </aside>
+        <aside class="panel inspector"><p class="eyebrow">INSPECTOR</p><pre id="inspector">Select a node</pre></aside>
+      </section>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

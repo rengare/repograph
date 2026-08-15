@@ -88,14 +88,19 @@ pub fn load_with_sidecar(edges: impl AsRef<Path>, nodes: impl AsRef<Path>) -> Re
     let nodes = nodes.as_ref();
     let sidecar = std::fs::read_to_string(nodes)
         .with_context(|| format!("opening node sidecar {}", nodes.display()))?;
-    let meta = parse_sidecar(&sidecar)
-        .with_context(|| format!("parsing node sidecar {}", nodes.display()))?;
-
     let edges_path = edges.as_ref();
     let edge_text = std::fs::read_to_string(edges_path)
         .with_context(|| format!("opening edge list {}", edges_path.display()))?;
-    let edges = parse_indexed_edges(&edge_text, meta.len())
-        .with_context(|| format!("parsing edge list {}", edges_path.display()))?;
+    from_exported_text(&edge_text, &sidecar)
+        .with_context(|| format!("parsing graph from {}", edges_path.display()))
+}
+
+/// Builds a searchable graph from the text of `rkg export`'s `repo.edges` and
+/// `nodes.tsv` files. Shared by the native file loader and browser viewer so the
+/// two surfaces accept precisely the same artifact format.
+pub fn from_exported_text(edges_text: &str, nodes_text: &str) -> Result<GraphData> {
+    let meta = parse_sidecar(nodes_text).context("parsing node sidecar")?;
+    let edges = parse_indexed_edges(edges_text, meta.len()).context("parsing indexed edges")?;
 
     let labels = meta.iter().map(|m| m.name.clone()).collect::<Vec<_>>();
     let adjacency = Csr::build(meta.len(), &edges);
@@ -268,5 +273,18 @@ mod tests {
     fn indexed_edges_reject_out_of_range() {
         let err = parse_indexed_edges("0 5\n", 3).unwrap_err();
         assert!(err.to_string().contains("exceeds node count"));
+    }
+
+    #[test]
+    fn exported_text_loads_the_same_graph_as_the_native_viewer() {
+        let nodes = "# index\tid\tname\tkind\tpath\n\
+                     0\tdir:.\troot\tdir\t.\n\
+                     1\tfile:src/a.rs\ta\tfile\tsrc/a.rs\n";
+        let graph = from_exported_text("0 1\n", nodes).unwrap();
+
+        assert_eq!(graph.node_count(), 2);
+        assert_eq!(graph.edge_count(), 1);
+        assert_eq!(graph.meta[1].name, "a");
+        assert_eq!(graph.adjacency.neighbors_of(0), &[1]);
     }
 }

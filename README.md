@@ -180,6 +180,24 @@ kind and the browsing tools light up.
   to `settings.json` and apply to both windowed and headless layouts. **Selection
   depth** controls how many edge hops stay bright and labeled after selecting a node.
 
+## Web viewer
+
+The browser viewer is published automatically to GitHub Pages whenever `main` is
+updated. It runs entirely in the browser: choose the `repo.edges` and `nodes.tsv`
+files produced by `rkg export`, and neither file is uploaded anywhere. The import
+screen also has a bundled graph of this repository for a quick preview.
+
+The initial web renderer provides pan/zoom, search, kind filters, node inspection,
+labels, and depth-based selection highlighting. It reads the same exported formats as
+the desktop viewer, so artifacts can be moved between the two without conversion.
+
+For local web development, build the WASM package and serve the `web/` directory with
+any static-file server:
+
+```sh
+wasm-pack build crates/gv-web --target web --dev --out-dir ../../web/pkg
+```
+
 ## MCP server — query the graph from coding agents
 
 `rkg-mcp` exposes the graph as MCP tools over stdio, so an agent can pull targeted
