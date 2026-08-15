@@ -141,6 +141,9 @@ pub struct Node {
     /// Doc comment / summary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// Variable names declared in a symbol's scope (parameters + local declarations).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locals: Vec<String>,
     /// Lines of content, 0 for structural nodes.
     #[serde(default)]
     pub loc: u32,
@@ -161,6 +164,7 @@ impl Node {
             span: None,
             signature: None,
             summary: None,
+            locals: Vec::new(),
             loc: 0,
         }
     }

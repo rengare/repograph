@@ -28,6 +28,9 @@ pub struct SymbolSpec {
     pub defs: &'static [&'static str],
     /// Identifier node kinds gathered inside a body for `References` edges.
     pub ref_kinds: &'static [&'static str],
+    /// Variable-binding node kinds whose declared names are captured as a symbol's
+    /// scope `locals` (local declarations; parameters are handled separately).
+    pub var_kinds: &'static [&'static str],
     /// Node kinds that name an enclosing scope (via their `name` field).
     pub container_kinds: &'static [&'static str],
     /// Rust's `impl_item`, reported as `impl <type>` (uses the `type` field).
@@ -79,6 +82,7 @@ pub static LANGUAGES: &[Language] = &[
                 "const_item", "static_item", "union_item", "macro_definition",
             ],
             ref_kinds: &["identifier", "type_identifier"],
+            var_kinds: &["let_declaration"],
             container_kinds: &["struct_item", "enum_item", "trait_item", "union_item", "mod_item"],
             impl_kind: Some("impl_item"),
             value_fn_decl: false,
@@ -96,6 +100,7 @@ pub static LANGUAGES: &[Language] = &[
                 "class_declaration", "method_definition",
             ],
             ref_kinds: &["identifier", "property_identifier"],
+            var_kinds: &["variable_declarator"],
             container_kinds: &["class_declaration"],
             impl_kind: None,
             value_fn_decl: true,
@@ -124,6 +129,7 @@ pub static LANGUAGES: &[Language] = &[
         symbols: SymbolSpec {
             defs: &["function_definition", "class_definition"],
             ref_kinds: &["identifier"],
+            var_kinds: &["assignment"],
             container_kinds: &["class_definition"],
             impl_kind: None,
             value_fn_decl: false,
@@ -141,6 +147,7 @@ pub static LANGUAGES: &[Language] = &[
                 "union_specifier", "type_definition",
             ],
             ref_kinds: &["identifier", "type_identifier", "field_identifier"],
+            var_kinds: &["declaration", "init_declarator"],
             container_kinds: &["struct_specifier", "union_specifier"],
             impl_kind: None,
             value_fn_decl: false,
@@ -161,6 +168,7 @@ pub static LANGUAGES: &[Language] = &[
                 "type_definition",
             ],
             ref_kinds: &["identifier", "type_identifier", "field_identifier"],
+            var_kinds: &["declaration", "init_declarator"],
             container_kinds: &[
                 "class_specifier", "struct_specifier", "namespace_definition", "union_specifier",
             ],
@@ -180,6 +188,7 @@ pub static LANGUAGES: &[Language] = &[
                 "record_declaration", "method_declaration", "constructor_declaration",
             ],
             ref_kinds: &["identifier", "type_identifier"],
+            var_kinds: &["variable_declarator"],
             container_kinds: &[
                 "class_declaration", "interface_declaration", "enum_declaration", "record_declaration",
             ],
@@ -196,6 +205,7 @@ pub static LANGUAGES: &[Language] = &[
         symbols: SymbolSpec {
             defs: &["function_declaration", "class_declaration", "object_declaration"],
             ref_kinds: &["identifier", "type_identifier"],
+            var_kinds: &["variable_declaration"],
             container_kinds: &["class_declaration", "object_declaration"],
             impl_kind: None,
             value_fn_decl: false,
@@ -214,6 +224,7 @@ pub static LANGUAGES: &[Language] = &[
                 "constructor_declaration",
             ],
             ref_kinds: &["identifier"],
+            var_kinds: &["variable_declarator"],
             container_kinds: &[
                 "class_declaration", "interface_declaration", "struct_declaration",
                 "record_declaration", "namespace_declaration",
@@ -234,6 +245,7 @@ const TS_SYMBOLS: SymbolSpec = SymbolSpec {
         "type_alias_declaration", "enum_declaration",
     ],
     ref_kinds: &["identifier", "property_identifier", "type_identifier"],
+    var_kinds: &["variable_declarator"],
     container_kinds: &["class_declaration", "abstract_class_declaration", "interface_declaration"],
     impl_kind: None,
     value_fn_decl: true,

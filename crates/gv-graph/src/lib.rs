@@ -165,6 +165,8 @@ pub struct NodeMeta {
     pub container: Option<String>,
     /// Doc comment / summary.
     pub doc: Option<String>,
+    /// Variable names declared in the symbol's scope (space-separated in the sidecar).
+    pub locals: Vec<String>,
 }
 
 /// A loaded graph: node state, edges, adjacency, and the original string ids.

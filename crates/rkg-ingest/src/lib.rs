@@ -159,6 +159,7 @@ fn add_file_symbols(
         });
         node.signature = Some(sym.signature.clone());
         node.summary = sym.doc.clone();
+        node.locals = sym.locals.clone();
         node.loc = sym.end_line.saturating_sub(sym.start_line) + 1;
         graph.add_node(node);
         graph.add_edge(Edge::new(file_id.clone(), id.clone(), EdgeKind::Defines));

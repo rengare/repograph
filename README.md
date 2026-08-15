@@ -119,7 +119,8 @@ scope, and edge kinds all included).
 **Code intelligence:** files are walked with a `.gitignore`-aware scanner. **Symbols**
 (functions, structs, enums, traits, classes, interfaces, methods, …) are extracted with
 tree-sitter and carry a **full signature** (parameters + return type), the **doc comment**,
-their **container** (`impl Csr`, a class, a namespace, a module), and a line span.
+their **container** (`impl Csr`, a class, a namespace, a module), the **variable names in
+scope** (parameters + local declarations), and a line span.
 **Imports/includes** become cross-file edges, resolved per language:
 
 | Language | Symbols | Import edges |

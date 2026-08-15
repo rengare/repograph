@@ -135,6 +135,9 @@ fn parse_sidecar(text: &str) -> Result<Vec<NodeMeta>> {
         let symbol_kind = optional(cols.next());
         let container = optional(cols.next());
         let doc = optional(cols.next());
+        let locals = optional(cols.next())
+            .map(|s| s.split_whitespace().map(str::to_owned).collect())
+            .unwrap_or_default();
 
         let index: usize = index
             .parse()
@@ -152,6 +155,7 @@ fn parse_sidecar(text: &str) -> Result<Vec<NodeMeta>> {
                 symbol_kind,
                 container,
                 doc,
+                locals,
             },
         ));
     }

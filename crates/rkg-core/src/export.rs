@@ -67,7 +67,7 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
     let mut buf = Vec::new();
     writeln!(
         buf,
-        "# index\tid\tname\tkind\tpath\tspan\tsignature\tsymbol_kind\tcontainer\tdoc"
+        "# index\tid\tname\tkind\tpath\tspan\tsignature\tsymbol_kind\tcontainer\tdoc\tlocals"
     )?;
     for (i, n) in graph.nodes.iter().enumerate() {
         let span = n
@@ -80,9 +80,10 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
         let symbol_kind = n.symbol_kind.as_deref().unwrap_or("");
         let container = n.container.as_deref().map(sanitize_cell).unwrap_or_default();
         let doc = n.summary.as_deref().map(sanitize_cell).unwrap_or_default();
+        let locals = n.locals.join(" ");
         writeln!(
             buf,
-            "{i}\t{}\t{}\t{}\t{}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}",
+            "{i}\t{}\t{}\t{}\t{}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}\t{locals}",
             n.id,
             n.name,
             n.kind.tag(),

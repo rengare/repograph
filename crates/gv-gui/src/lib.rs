@@ -443,6 +443,12 @@ fn draw_inspector(ui: &mut egui::Ui, meta: &NodeMeta, actions: &mut GuiActions) 
         ui.label(egui::RichText::new(doc).italics().weak());
     }
 
+    if !meta.locals.is_empty() {
+        ui.add_space(SECTION_GAP * 0.5);
+        ui.label(format!("locals ({}):", meta.locals.len()));
+        ui.label(egui::RichText::new(meta.locals.join(", ")).weak());
+    }
+
     ui.add_space(SECTION_GAP * 0.5);
     if ui.button("Close").clicked() {
         actions.close_inspect = true;

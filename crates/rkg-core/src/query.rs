@@ -177,6 +177,8 @@ pub struct ContextEntry {
     pub signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub locals: Vec<String>,
     /// Hops from the seed (0 = the seed itself).
     pub distance: u32,
     /// Human-readable reason this entry earned its place.
@@ -286,6 +288,7 @@ pub fn context_pack(graph: &Graph, seed: &str, token_budget: u32) -> Option<Cont
             container: node.container.clone(),
             signature: node.signature.clone(),
             summary: node.summary.clone(),
+            locals: node.locals.clone(),
             distance: hop,
             reason,
             est_tokens: est,

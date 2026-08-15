@@ -6,7 +6,7 @@
 //! per-language details (which node kinds are definitions, how docs attach) live in
 //! [`crate::registry::SymbolSpec`]; the tree walk here is generic over them.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
 use tree_sitter::{Node, Parser};
@@ -31,6 +31,9 @@ pub struct SymbolDef {
     pub end_line: u32,
     /// Distinct identifier names used inside the body, minus the symbol's own.
     pub refs: Vec<String>,
+    /// Variable names declared in this symbol's scope — its parameters and local
+    /// declarations (not those of nested functions). Empty for non-scoped symbols.
+    pub locals: Vec<String>,
 }
 
 /// Owns one parser per language tag, reused across files.
@@ -129,7 +132,7 @@ fn last_identifier(node: Node) -> Option<Node> {
 }
 
 fn build_symbol(node: Node, name: &str, spec: &SymbolSpec, src: &[u8]) -> SymbolDef {
-    let mut refs = std::collections::HashSet::new();
+    let mut refs = HashSet::new();
     gather_refs(node, spec, src, name, &mut refs);
     let mut refs: Vec<String> = refs.into_iter().collect();
     refs.sort_unstable();
@@ -143,6 +146,127 @@ fn build_symbol(node: Node, name: &str, spec: &SymbolSpec, src: &[u8]) -> Symbol
         start_line: node.start_position().row as u32 + 1,
         end_line: node.end_position().row as u32 + 1,
         refs,
+        locals: collect_locals(node, spec, src, name),
+    }
+}
+
+/// The variable names bound in `node`'s own scope: its parameters plus the local
+/// variables it declares. Does not descend into nested definitions, so a
+/// function's locals don't leak in from an inner function/class.
+fn collect_locals(node: Node, spec: &SymbolSpec, src: &[u8], own: &str) -> Vec<String> {
+    let mut set = HashSet::new();
+    if let Some(params) = find_params(node) {
+        collect_param_names(params, src, &mut set);
+    }
+    walk_locals(node, spec, src, &mut set, true);
+    set.remove(own);
+    let mut names: Vec<String> = set.into_iter().collect();
+    names.sort_unstable();
+    names.truncate(100);
+    names
+}
+
+fn walk_locals(node: Node, spec: &SymbolSpec, src: &[u8], set: &mut HashSet<String>, is_root: bool) {
+    if !is_root && spec.defs.contains(&node.kind()) {
+        return; // a nested definition owns its own scope
+    }
+    if !is_root && spec.var_kinds.contains(&node.kind()) {
+        binding_names(node, src, set);
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if set.len() >= 100 {
+            break;
+        }
+        walk_locals(child, spec, src, set, false);
+    }
+}
+
+/// The parameter-list node of a definition, if any — a `parameters` field, the
+/// list inside a C/C++ `function_declarator`, or an unfielded child list (Kotlin).
+fn find_params(node: Node) -> Option<Node> {
+    if let Some(params) = node.child_by_field_name("parameters") {
+        return Some(params);
+    }
+    let mut cur = node;
+    while let Some(declarator) = cur.child_by_field_name("declarator") {
+        if let Some(params) = declarator.child_by_field_name("parameters") {
+            return Some(params);
+        }
+        cur = declarator;
+    }
+    let mut cursor = node.walk();
+    node.children(&mut cursor).find(|c| {
+        matches!(
+            c.kind(),
+            "parameters" | "formal_parameters" | "parameter_list" | "function_value_parameters"
+        )
+    })
+}
+
+fn collect_param_names(params: Node, src: &[u8], set: &mut HashSet<String>) {
+    let mut cursor = params.walk();
+    for param in params.children(&mut cursor) {
+        if !param.is_named() {
+            continue;
+        }
+        match param.kind() {
+            "identifier" | "shorthand_property_identifier_pattern" => push_ident(param, src, set),
+            "self_parameter" | "this" => {}
+            _ => binding_names(param, src, set),
+        }
+    }
+}
+
+/// Extracts the declared name(s) of a binding node (a local declaration or a
+/// parameter), handling `name`/`pattern`/`left` fields, C declarator descent, and
+/// grammars that keep the name as a bare identifier child.
+fn binding_names(node: Node, src: &[u8], set: &mut HashSet<String>) {
+    if let Some(name) = node.child_by_field_name("name") {
+        push_ident(name, src, set);
+        return;
+    }
+    if let Some(pattern) = node.child_by_field_name("pattern") {
+        collect_pattern_idents(pattern, src, set);
+        return;
+    }
+    if let Some(left) = node.child_by_field_name("left") {
+        collect_pattern_idents(left, src, set); // Python `x = …`
+        return;
+    }
+    let mut cur = node;
+    let mut descended = false;
+    while let Some(declarator) = cur.child_by_field_name("declarator") {
+        cur = declarator;
+        descended = true;
+    }
+    if descended && cur.kind().ends_with("identifier") {
+        push_ident(cur, src, set);
+        return;
+    }
+    let mut cursor = node.walk();
+    if let Some(id) = node.children(&mut cursor).find(|c| c.kind() == "identifier") {
+        push_ident(id, src, set);
+    }
+}
+
+/// Collects every `identifier` under a pattern (handles tuple/list destructuring).
+fn collect_pattern_idents(node: Node, src: &[u8], set: &mut HashSet<String>) {
+    if node.kind() == "identifier" {
+        push_ident(node, src, set);
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_pattern_idents(child, src, set);
+    }
+}
+
+fn push_ident(node: Node, src: &[u8], set: &mut HashSet<String>) {
+    if let Ok(text) = node.utf8_text(src) {
+        // `self`/`this` are receivers, not meaningful scope locals.
+        if !text.is_empty() && text != "self" && text != "this" && set.len() < 100 {
+            set.insert(text.to_string());
+        }
     }
 }
 
@@ -466,6 +590,38 @@ class Store:
         assert_eq!(find(&syms, "Get").kind, "method");
         assert_eq!(find(&syms, "Get").container.as_deref(), Some("Store"));
         assert_eq!(find(&syms, "I").kind, "interface");
+    }
+
+    #[test]
+    fn captures_scope_locals_params_and_declarations() {
+        let mut ex = SymbolExtractor::new().unwrap();
+        // `total` is a local, `path` a parameter; `read` is a call (a ref, not a
+        // local); the nested fn's `inner_only` must not leak into count's scope.
+        let src = "\
+fn count(path: &str) -> usize {
+    let total = read(path);
+    fn helper() { let inner_only = 1; }
+    total
+}
+";
+        let syms = ex.extract("rs", src);
+        let count = find(&syms, "count");
+        assert!(count.locals.contains(&"path".to_string()), "locals: {:?}", count.locals);
+        assert!(count.locals.contains(&"total".to_string()));
+        assert!(!count.locals.contains(&"inner_only".to_string()), "nested leaked");
+        assert!(!count.locals.contains(&"read".to_string()), "call is not a local");
+    }
+
+    #[test]
+    fn captures_python_and_js_locals() {
+        let mut ex = SymbolExtractor::new().unwrap();
+        let py = ex.extract("py", "def f(a, b):\n    total = a + b\n    return total\n");
+        let f = find(&py, "f");
+        assert!(f.locals.contains(&"a".to_string()) && f.locals.contains(&"total".to_string()));
+
+        let js = ex.extract("js", "function g(x) { const y = x + 1; return y; }\n");
+        let g = find(&js, "g");
+        assert!(g.locals.contains(&"x".to_string()) && g.locals.contains(&"y".to_string()));
     }
 
     #[test]
