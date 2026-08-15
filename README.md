@@ -158,7 +158,10 @@ kind and the browsing tools light up.
 - **Move:** `W`/`S` forward/back, `A`/`D` strafe, `R`/`F` up/down.
 - **Look:** arrow keys, or hold the **right mouse button** and drag.
 - **Zoom:** mouse wheel. **Reset view:** `Space`. **Quit:** `Esc`.
-- **Left-click a node** → open its inspector (kind, path, container, signature, doc).
+- **Left-click a node** → open its inspector (kind, path, container, signature, doc)
+  and bring it to the foreground: the node and its edge-connected neighbours stay
+  lit while the rest of the graph dims. Click the same node again to deselect and
+  restore full brightness.
 - **Left-click an edge** → jump to one endpoint; click the same edge again to hop to
   the other end.
 

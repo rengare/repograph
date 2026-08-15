@@ -35,6 +35,10 @@ struct Camera {
 // One flag per node: 0 hides the node and every edge touching it. Driven by the
 // GUI's per-kind visibility checkboxes; all 1 when unfiltered.
 @group(0) @binding(3) var<storage, read> visible: array<u32>;
+// One factor per node: 1.0 full brightness, <1.0 dimmed toward black. Driven by
+// a node selection (the selected node and its edge-connected neighbours stay at
+// 1.0, everything else fades); all 1.0 when nothing is selected.
+@group(0) @binding(4) var<storage, read> dim: array<f32>;
 
 struct NodeOut {
     @builtin(position) clip_position: vec4<f32>,
@@ -68,7 +72,7 @@ fn vs_nodes(@builtin(vertex_index) vertex_index: u32) -> NodeOut {
     let corner = CORNERS[vertex_index % 6u];
     let view_position = camera.view * vec4<f32>(node.position.xyz, 1.0);
 
-    out.color = node.color;
+    out.color = vec4<f32>(node.color.rgb * dim[node_index], node.color.a);
     out.offset = corner;
 
     // Filtered out by kind, or behind the camera (where -view_z would flip the
@@ -119,7 +123,9 @@ fn vs_edges(@builtin(vertex_index) vertex_index: u32) -> EdgeOut {
     let node = nodes[node_index];
 
     let view_position = camera.view * vec4<f32>(node.position.xyz, 1.0);
-    out.color = node.color;
+    // An edge dims with whichever endpoint is dimmer.
+    let edge_dim = min(dim[edge.tail], dim[edge.head]);
+    out.color = vec4<f32>(node.color.rgb * edge_dim, node.color.a);
 
     // Hide the edge if either endpoint's kind is filtered out, or is behind
     // the camera.

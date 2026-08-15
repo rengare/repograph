@@ -80,14 +80,21 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
         let symbol_kind = n.symbol_kind.as_deref().unwrap_or("");
         let container = n.container.as_deref().map(sanitize_cell).unwrap_or_default();
         let doc = n.summary.as_deref().map(sanitize_cell).unwrap_or_default();
-        let locals = n.locals.join(" ");
+        // Locals can be multi-line destructuring patterns, so sanitize each one
+        // (and the id/name/path cells) before joining into the tab-separated row.
+        let locals = n
+            .locals
+            .iter()
+            .map(|l| sanitize_cell(l))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let id = sanitize_cell(&n.id);
+        let name = sanitize_cell(&n.name);
+        let path = sanitize_cell(&n.path);
         writeln!(
             buf,
-            "{i}\t{}\t{}\t{}\t{}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}\t{locals}",
-            n.id,
-            n.name,
-            n.kind.tag(),
-            n.path
+            "{i}\t{id}\t{name}\t{}\t{path}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}\t{locals}",
+            n.kind.tag()
         )?;
     }
     std::fs::write(path, buf).with_context(|| format!("writing {}", path.display()))?;
@@ -155,6 +162,33 @@ mod tests {
         };
         let gd = to_graph_data(&g, &imports_only);
         assert_eq!(gd.edges.len(), 1);
+    }
+
+    #[test]
+    fn nodes_tsv_rows_survive_multiline_fields() {
+        // A symbol whose signature and locals span multiple lines (as happens with
+        // destructuring parameters in JS/TS) must still emit a single, well-formed
+        // TSV row so the viewer's column-count parser doesn't choke.
+        let mut g = Graph::new();
+        let mut n = Node::new(NodeKind::Symbol, "src/a.tsx::View", "View");
+        n.signature = Some("View = () => {\n  return <div/>;\n}".to_owned());
+        n.locals = vec!["{\n  a,\n  b\n}".to_owned(), "c".to_owned()];
+        g.add_node(n);
+
+        let dir = std::env::temp_dir().join(format!("rkg-tsv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("nodes.tsv");
+        write_nodes_tsv(&g, &path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+
+        for line in text.lines().filter(|l| !l.starts_with('#')) {
+            let cols = line.split('\t').count();
+            assert!(
+                cols >= 5,
+                "row has too few columns ({cols}): {line:?}"
+            );
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

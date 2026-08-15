@@ -18,6 +18,9 @@ pub struct Renderer {
     /// One `u32` per node: 1 visible, 0 filtered out by kind. Uploaded whole
     /// whenever the GUI's visibility checkboxes change.
     visibility_buffer: wgpu::Buffer,
+    /// One `f32` per node: 1.0 full brightness, <1.0 dimmed. Uploaded whole
+    /// whenever the node selection changes.
+    dim_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     depth_view: wgpu::TextureView,
 
@@ -64,6 +67,14 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
+        // Full brightness until a selection dims the rest. Length matches the
+        // node buffer so the shader can index it by node.
+        let dim_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("dim"),
+            contents: bytemuck::cast_slice(&vec![1.0f32; buffers.node_count.max(1) as usize]),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("graph"),
             entries: &[
@@ -80,6 +91,7 @@ impl Renderer {
                 storage_entry(1),
                 storage_entry(2),
                 storage_entry(3),
+                storage_entry(4),
             ],
         });
 
@@ -102,6 +114,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: visibility_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: dim_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -127,6 +143,7 @@ impl Renderer {
             config,
             camera_buffer,
             visibility_buffer,
+            dim_buffer,
             bind_group,
             depth_view,
             nodes,
@@ -140,6 +157,14 @@ impl Renderer {
         self.context
             .queue
             .write_buffer(&self.visibility_buffer, 0, bytemuck::cast_slice(visible));
+    }
+
+    /// Uploads a fresh per-node dim mask (`1.0` full brightness, `<1.0` dimmed).
+    /// The slice must be `node_count` long; the shader indexes it by node.
+    pub fn set_dim(&self, dim: &[f32]) {
+        self.context
+            .queue
+            .write_buffer(&self.dim_buffer, 0, bytemuck::cast_slice(dim));
     }
 
     /// Present mode for the configured vsync setting.

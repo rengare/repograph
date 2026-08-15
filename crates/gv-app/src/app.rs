@@ -78,6 +78,11 @@ const REPORT_INTERVAL: Duration = Duration::from_secs(2);
 /// neighbours without a shader change.
 const HIGHLIGHT_SCALE: f32 = 2.5;
 
+/// How far the rest of the graph fades when a node is selected — its RGB is
+/// multiplied by this, so a low value pushes unselected nodes toward black
+/// while the selection and its edge-connected neighbours stay at full 1.0.
+const DIM_FACTOR: f32 = 0.18;
+
 /// Distance the camera sits from a node it focuses on — the default framing.
 const FOCUS_STANDOFF: f32 = 700.0;
 
@@ -333,6 +338,45 @@ impl App {
         self.inspected = None;
         self.search.selected = None;
         self.edge_jump = None;
+        self.clear_dim();
+    }
+
+    /// Dims every node and edge except `idx` and its edge-connected neighbours,
+    /// bringing the selection to the foreground. The dim mask is a separate GPU
+    /// buffer, so it does not disturb positions or the kind-visibility mask.
+    fn apply_dim(&mut self, idx: usize) {
+        let mask = self.dim_mask(idx);
+        if let Some(active) = &self.active {
+            active.renderer.set_dim(&mask);
+        }
+    }
+
+    /// Builds the per-node dim mask for a selection of `idx`: `1.0` for the
+    /// selected node and every node sharing an edge with it, `DIM_FACTOR` for
+    /// the rest.
+    fn dim_mask(&self, idx: usize) -> Vec<f32> {
+        let count = self.graph.nodes.len();
+        let mut mask = vec![DIM_FACTOR; count];
+        if idx < count {
+            mask[idx] = 1.0;
+        }
+        // Neighbours reachable across a single edge in either direction.
+        for e in &self.graph.edges {
+            let (from, to) = (e.from as usize, e.to as usize);
+            if from == idx && to < count {
+                mask[to] = 1.0;
+            } else if to == idx && from < count {
+                mask[from] = 1.0;
+            }
+        }
+        mask
+    }
+
+    /// Restores full brightness to every node and edge.
+    fn clear_dim(&mut self) {
+        if let Some(active) = &self.active {
+            active.renderer.set_dim(&vec![1.0; self.graph.nodes.len()]);
+        }
     }
 
     /// Uploads the per-node visibility mask from the current kind filters, so the
@@ -412,6 +456,7 @@ impl App {
             return Ok(());
         }
         self.highlight_node(idx)?;
+        self.apply_dim(idx);
         let p = self.graph.nodes[idx].position;
         self.camera
             .focus_on(Vec3::new(p[0], p[1], p[2]), FOCUS_STANDOFF);
@@ -434,7 +479,14 @@ impl App {
 
         if let Some(idx) = self.pick_node(cx, cy, w, h) {
             self.edge_jump = None;
-            self.highlight_node(idx)?;
+            // Clicking the already-selected node toggles the selection off,
+            // restoring full brightness; otherwise select it and dim the rest.
+            if self.inspected == Some(idx) {
+                self.clear_inspection();
+            } else {
+                self.highlight_node(idx)?;
+                self.apply_dim(idx);
+            }
         } else if let Some(edge) = self.pick_edge(cx, cy, w, h) {
             let endpoint = match self.edge_jump {
                 Some((prev, ep)) if prev == edge => 1 - ep,
@@ -1029,6 +1081,31 @@ mod tests {
         assert_eq!(app.graph.nodes[0].size, size0);
         assert_eq!(app.graph.nodes[2].size, size2 * HIGHLIGHT_SCALE);
         assert_eq!(app.selected_highlight, Some((2, size2)));
+    }
+
+    #[test]
+    fn dim_mask_lights_the_selection_and_its_edge_neighbours_only() {
+        use gv_graph::Edge;
+
+        let mut app = app_of(gv_graph::testing::triangle());
+        // A path 0 — 1 — 2 (node 0 not connected to node 2 directly).
+        app.graph.edges = vec![
+            Edge { from: 0, to: 1 },
+            Edge { from: 1, to: 2 },
+        ];
+
+        let mask = app.dim_mask(1);
+
+        // Selected node 1 and both its edge neighbours (0 and 2) are lit.
+        assert_eq!(mask[0], 1.0);
+        assert_eq!(mask[1], 1.0);
+        assert_eq!(mask[2], 1.0);
+
+        // Selecting an endpoint lights only it and its single neighbour.
+        let mask0 = app.dim_mask(0);
+        assert_eq!(mask0[0], 1.0);
+        assert_eq!(mask0[1], 1.0);
+        assert_eq!(mask0[2], DIM_FACTOR);
     }
 
     #[test]
