@@ -125,19 +125,22 @@ their **container** (`impl Csr`, a class, a namespace, a module), the **variable
 scope** (parameters + local declarations), and a line span.
 **Imports/includes** become cross-file edges, resolved per language:
 
-| Language | Symbols | Import edges |
-| --- | --- | --- |
-| Rust | ✓ | `mod` / `use crate::` |
-| JavaScript / TypeScript | ✓ | `import` / `export … from` / `require` |
-| Python | ✓ | `import a.b`, `from .mod import x` (incl. `__init__.py`) |
-| C / C++ | ✓ | `#include "…"` (`.h` parsed as C++) |
-| Java | ✓ | `import a.b.C;` → `a/b/C.java` |
-| Kotlin | ✓ | `import a.b.C` → `a/b/C.kt` |
-| C# | ✓ | `using A.B.C;` → `A/B/C.cs` (best-effort) |
+| Language | Files | Symbols | Import edges |
+| --- | --- | --- | --- |
+| Rust | `.rs` | ✓ | `mod` / `use crate::` |
+| JavaScript | `.js .jsx .mjs .cjs` | ✓ | `import` / `export … from` / `require` |
+| TypeScript | `.ts .mts .cts .tsx` | ✓ | `import` / `export … from` / `require` |
+| Python | `.py .pyi` | ✓ | `import a.b`, `from .mod import x` (incl. `__init__.py`) |
+| C | `.c` | ✓ | `#include "…"` (local; `<…>` skipped) |
+| C++ | `.cpp .cc .cxx .hpp .hh .hxx .h` | ✓ | `#include "…"` (`.h` parsed as C++) |
+| Java | `.java` | ✓ | `import a.b.C;` → `a/b/C.java` |
+| Kotlin | `.kt .kts` | ✓ | `import a.b.C` → `a/b/C.kt` |
+| C# | `.cs` | ✓ | `using A.B.C;` → `A/B/C.cs` (best-effort) |
 
-Markdown headings become sections and `[links](…)` become edges. Adding a language is a
-single entry in `crates/rkg-ingest/src/registry.rs` (grammar + node kinds + optional
-import extractor).
+Markdown (`.md .markdown`) headings become sections and `[links](…)` become edges;
+every other text file is indexed as a plain `file` node. Adding a language is a single
+entry in `crates/rkg-ingest/src/registry.rs` (grammar + node kinds + optional import
+extractor).
 
 ## The viewer
 
@@ -202,6 +205,34 @@ The graph path can also come from the `RKG_GRAPH` environment variable.
                         rkg query / rkg-mcp                 graphvisualizer
                         (text · JSON · MCP)                 (searchable 3D viewer)
 ```
+
+## Node kinds, edge kinds & on-disk formats
+
+**Node kinds** (the prefix on every id): `dir`, `file`, `doc` (a markdown document),
+`sec` (a markdown heading/section), `sym` (a code symbol — function, struct, class,
+method, …). Non-code, non-markdown files are `file` nodes with no symbols.
+
+**Edge kinds** (directed): `contains` (dir → child, doc → section), `imports`
+(file → file, resolved per language above), `links` (markdown `[..](..)` → file/doc),
+`defines` (file → symbol), `references` (symbol → symbol within a file, best-effort).
+
+**On-disk artifacts:**
+
+- **`graph.json`** — the full typed graph from `rkg build`: every node with its kind,
+  path, name, language, and (for symbols) symbol-kind, container, full signature, doc
+  comment, scope locals, and line span; plus typed, directed edges. This is what
+  `rkg query` and `rkg-mcp` read.
+- **`repo.edges`** — dense integer `from to` pairs, one edge per line (`rkg export`).
+  Loads in this viewer and in the original `graphvisualizer(-rs)`; `#`/`%` comment
+  lines and any extra columns are ignored.
+- **`nodes.tsv`** — the node sidecar that turns the anonymous edge list into a
+  browsable, coloured, searchable graph. Tab-separated, one row per node in dense
+  order, columns:
+  `index  id  name  kind  path  span  signature  symbol_kind  container  doc  locals`.
+  Everything past `path` is optional, so a narrower/older sidecar still loads.
+- **`settings.json`** — viewer configuration: window geometry, vsync, `3d`, node-size
+  range, clear colour, **move / wheel-zoom speed**, and the default `edgeInput` /
+  `nodesInput`. All keys are optional; a missing file falls back to defaults.
 
 ## Credits
 
