@@ -101,6 +101,7 @@ During development you can also run through cargo without building first, e.g.
 rkg build [PATH] [-o .rkg/graph.json]     # scan a repo (respects .gitignore) → graph JSON
 rkg query <SUBCOMMAND> [--graph P] [--json]
 rkg export --edges repo.edges --nodes nodes.tsv [--graph P] [--edge-kind K ...]
+rkg mcp install <opencode|claude-code|codex|junie>
 ```
 
 Query subcommands:
@@ -172,7 +173,7 @@ kind and the browsing tools light up.
 - **System settings** — background colour, **move speed** (W/S/A/D/R/F) and
   **wheel zoom** speed, and `Reset camera`. Speeds persist in `settings.json`.
 
-## MCP server — query the graph from Claude Code
+## MCP server — query the graph from coding agents
 
 `rkg-mcp` exposes the graph as MCP tools over stdio, so an agent can pull targeted
 context instead of reading files: `build` (scan a repo into the graph and make it
@@ -187,7 +188,7 @@ no separate `rkg build` step is required.
 {
   "mcpServers": {
     "repograph": {
-      "command": "/absolute/path/to/target/release/rkg-mcp",
+      "command": "rkg-mcp",
       "args": ["--graph", ".rkg/graph.json"]
     }
   }
@@ -195,6 +196,29 @@ no separate `rkg build` step is required.
 ```
 
 The graph path can also come from the `RKG_GRAPH` environment variable.
+
+### Install for a client
+
+From the repository root, install the server onto your `PATH` and add a
+project-scoped configuration in one step:
+
+```sh
+cargo run --release -p rkg-cli -- mcp install opencode
+cargo run --release -p rkg-cli -- mcp install claude-code
+cargo run --release -p rkg-cli -- mcp install codex
+cargo run --release -p rkg-cli -- mcp install junie
+```
+
+Each command installs `rkg-mcp` with Cargo and creates one configuration file:
+`opencode.json`, `.mcp.json`, `.codex/config.toml`, or `.junie/mcp/mcp.json`.
+The configuration uses the shared `.rkg/graph.json` artifact. The installer never
+overwrites an existing `repograph` server entry; use `--no-install` to add only the
+configuration when `rkg-mcp` is already on your `PATH`.
+
+Codex itself must be installed separately (on Linux/macOS:
+`curl -fsSL https://chatgpt.com/codex/install.sh | sh`). Restart OpenCode after
+configuration changes; Claude Code, Codex, and Junie expose their MCP status through
+their respective `/mcp` views.
 
 ## How it fits together
 
