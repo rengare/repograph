@@ -81,10 +81,6 @@ const HIGHLIGHT_SCALE: f32 = 2.5;
 /// Distance the camera sits from a node it focuses on — the default framing.
 const FOCUS_STANDOFF: f32 = 700.0;
 
-/// Multiplier on mouse-wheel notches, so one scroll travels a useful distance
-/// across a graph that spans thousands of units.
-const WHEEL_ZOOM_SPEED: f32 = 6.0;
-
 /// Smallest clickable node radius in pixels — a distant node's sprite can shrink
 /// below the cursor's precision, so picking is forgiving.
 const PICK_MIN_RADIUS: f32 = 7.0;
@@ -635,6 +631,8 @@ impl App {
         }
         self.report_throughput(now);
 
+        // Movement keys read the camera's velocity; keep it live with the setting.
+        self.camera.velocity = Vec3::splat(self.config.move_speed);
         self.input.apply_to(&mut self.camera);
 
         let active = self.active.as_mut().expect("active checked above");
@@ -879,7 +877,7 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 50.0,
                 };
-                self.camera.zoom(steps * WHEEL_ZOOM_SPEED);
+                self.camera.zoom(steps * self.config.wheel_zoom_speed);
             }
 
             WindowEvent::CursorMoved { position, .. } => {

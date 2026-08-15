@@ -206,6 +206,13 @@ pub const SPEED_RANGE: std::ops::RangeInclusive<f32> = 0.1..=1000.0;
 /// inverts every force. The original clamped this too.
 pub const MIN_AREA: f32 = 0.1;
 
+/// Bounds for the camera move-speed setting (world units per frame).
+pub const MIN_MOVE_SPEED: f32 = 1.0;
+pub const MAX_MOVE_SPEED: f32 = 5000.0;
+/// Bounds for the mouse-wheel zoom multiplier.
+pub const MIN_WHEEL_ZOOM: f32 = 0.1;
+pub const MAX_WHEEL_ZOOM: f32 = 100.0;
+
 /// Width of each edge-anchored panel window.
 const PANEL_WIDTH: f32 = 290.0;
 /// Inset of each panel from the window edge it anchors to.
@@ -254,6 +261,23 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
                 ui.add(egui::Slider::new(&mut config.red, 0.0..=255.0).text("red"));
                 ui.add(egui::Slider::new(&mut config.green, 0.0..=255.0).text("green"));
                 ui.add(egui::Slider::new(&mut config.blue, 0.0..=255.0).text("blue"));
+
+                ui.separator();
+                // Camera controls: W/S/A/D/R/F move speed and mouse-wheel zoom.
+                if ui
+                    .add(egui::DragValue::new(&mut config.move_speed).prefix("move speed: "))
+                    .changed()
+                {
+                    config.move_speed = config.move_speed.clamp(MIN_MOVE_SPEED, MAX_MOVE_SPEED);
+                }
+                if ui
+                    .add(egui::DragValue::new(&mut config.wheel_zoom_speed).prefix("wheel zoom: "))
+                    .changed()
+                {
+                    config.wheel_zoom_speed =
+                        config.wheel_zoom_speed.clamp(MIN_WHEEL_ZOOM, MAX_WHEEL_ZOOM);
+                }
+
                 ui.add_space(SECTION_GAP * 0.5);
                 if ui.button("Reset camera").clicked() {
                     actions.reset_camera = true;

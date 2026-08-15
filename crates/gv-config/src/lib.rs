@@ -39,6 +39,12 @@ pub struct AppConfig {
     pub node_size_range_start: f32,
     pub node_size_range_end: f32,
 
+    /// Camera translation speed (world units per frame) for the `W`/`S`/`A`/`D`/
+    /// `R`/`F` movement keys.
+    pub move_speed: f32,
+    /// Multiplier applied to mouse-wheel notches when zooming.
+    pub wheel_zoom_speed: f32,
+
     /// Path to the whitespace-separated edge list to load.
     pub edge_input: PathBuf,
 
@@ -68,6 +74,8 @@ impl Default for AppConfig {
             show_labels: false,
             node_size_range_start: 10.0,
             node_size_range_end: 30.0,
+            move_speed: 100.0,
+            wheel_zoom_speed: 6.0,
             edge_input: PathBuf::from("array.edges"),
             nodes_input: None,
         }

@@ -166,6 +166,8 @@ kind and the browsing tools light up.
   positions snap on when you stop it (or when you tick Labels mid-run).
 - **Algorithms** — pick a layout (`F-R gpu`, `gpu barnes-hut`, `cpu`, …), toggle
   `Update` to run it, `Reseed` to restart, `3d`/`Show edge` display options.
+- **System settings** — background colour, **move speed** (W/S/A/D/R/F) and
+  **wheel zoom** speed, and `Reset camera`. Speeds persist in `settings.json`.
 
 ## MCP server — query the graph from Claude Code
 
