@@ -477,4 +477,30 @@ mod tests {
         assert!(error.to_string().contains("already configures"));
         fs::remove_dir_all(project).unwrap();
     }
+
+    #[test]
+    fn appends_to_existing_json_configuration() {
+        let project = temp_project();
+        let path = project.join(".mcp.json");
+        fs::write(
+            &path,
+            r#"{
+  "keep": true,
+  "mcpServers": {
+    "other": { "command": "other-mcp" }
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        install_json_mcp(&path).unwrap();
+
+        let config: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(config["keep"], true);
+        assert_eq!(config["mcpServers"]["other"]["command"], "other-mcp");
+        assert_eq!(config["mcpServers"]["repograph"]["command"], "rkg-mcp");
+        fs::remove_dir_all(project).unwrap();
+    }
 }
