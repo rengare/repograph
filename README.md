@@ -4,6 +4,8 @@ Turn a code repository into a **typed knowledge graph** — then query it (to gi
 compact, token-cheap context) or **browse it in an interactive 3D viewer** (search files
 and symbols, colour by kind, walk the import/reference web).
 
+![repograph visualizing its own codebase — files, docs, and symbols with labels on](docs/screenshot.png)
+
 Two things live here:
 
 - **The knowledge graph** — a scanner (`rkg`) that walks a repo and builds a directed,
