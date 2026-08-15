@@ -1,0 +1,64 @@
+name: Build Binaries
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            artifact: linux-x86_64
+            suffix: ""
+          - name: macOS
+            os: macos-13
+            artifact: macos-x86_64
+            suffix: ""
+          - name: macOS ARM64
+            os: macos-14
+            artifact: macos-aarch64
+            suffix: ""
+          - name: Windows
+            os: windows-latest
+            artifact: windows-x86_64
+            suffix: .exe
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            artifact: linux-aarch64
+            suffix: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux viewer dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libegl1-mesa-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --locked --release -p rkg-cli -p rkg-mcp -p gv-app
+
+      - name: Upload release binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: repograph-${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            target/release/rkg${{ matrix.suffix }}
+            target/release/rkg-mcp${{ matrix.suffix }}
+            target/release/graphvisualizer${{ matrix.suffix }}
