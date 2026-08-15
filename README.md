@@ -223,3 +223,28 @@ to egui.
 The knowledge-graph crates (`rkg-core`, `rkg-ingest`, `rkg-cli`, `rkg-mcp`) are new to
 this project. Symbol extraction uses [tree-sitter](https://tree-sitter.github.io/) with
 the Rust, JavaScript/TypeScript, Python, C, C++, Java, Kotlin, and C# grammars.
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option — the standard Rust-ecosystem dual license.
+
+**License chain.** The forked `gv-*` viewer crates originate from
+[graphvisualizer-rs](https://github.com/rengare/graphvisualizer) and the C++
+`graphvisualizer`, both by the same author, and are released here under the same
+`MIT OR Apache-2.0` terms as the rest of the project. Every third-party dependency is
+used under its own **permissive** license — predominantly MIT and/or Apache-2.0, with
+some BSD, Zlib, ISC, BSL-1.0, and Unicode-3.0; **none are copyleft**. tree-sitter and
+its grammars are MIT; `egui`, `wgpu`, and `winit` are MIT or Apache-2.0. When you
+redistribute a **compiled binary**, include those dependencies' license texts and
+notices (generate them with e.g. [`cargo-about`](https://github.com/EmbarkStudios/cargo-about)
+or [`cargo-bundle-licenses`](https://github.com/sstadick/cargo-bundle-licenses)).
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for
+inclusion in this work by you, as defined in the Apache-2.0 license, shall be dual
+licensed as above, without any additional terms or conditions.
