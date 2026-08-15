@@ -408,9 +408,9 @@ impl App {
         self.clear_dim();
     }
 
-    /// Dims every node and edge except `idx` and its edge-connected neighbours,
-    /// bringing the selection to the foreground. The dim mask is a separate GPU
-    /// buffer, so it does not disturb positions or the kind-visibility mask.
+    /// Dims nodes and edges outside `idx`'s configured-depth neighborhood. The
+    /// dim mask is a separate GPU buffer, so it does not disturb positions or
+    /// the kind-visibility mask.
     fn apply_dim(&mut self, idx: usize) {
         let mask = self.dim_mask(idx);
         if let Some(active) = &self.active {
@@ -781,6 +781,11 @@ impl App {
             GuiActions::default()
         };
         self.reconcile_labels_and_update();
+        if actions.selection_depth_changed {
+            if let Some(selected) = self.inspected {
+                self.apply_dim(selected);
+            }
+        }
         self.persist_graph_settings(actions.selection_depth_changed)?;
 
         let active = self.active.as_mut().expect("active checked above");

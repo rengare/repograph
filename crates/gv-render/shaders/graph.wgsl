@@ -123,7 +123,8 @@ fn vs_edges(@builtin(vertex_index) vertex_index: u32) -> EdgeOut {
     let node = nodes[node_index];
 
     let view_position = camera.view * vec4<f32>(node.position.xyz, 1.0);
-    // An edge dims with whichever endpoint is dimmer.
+    // An edge dims with whichever endpoint is dimmer. As selection depth grows,
+    // every edge whose endpoints enter the neighborhood becomes fully bright.
     let edge_dim = min(dim[edge.tail], dim[edge.head]);
     out.color = vec4<f32>(node.color.rgb * edge_dim, node.color.a);
 
