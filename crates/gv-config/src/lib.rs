@@ -95,13 +95,20 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    /// Parses settings from a JSON string. Missing keys fall back to [`Default`].
+    /// The filesystem-free entry point used on the web, where config arrives as
+    /// text rather than a file path.
+    pub fn from_json_str(text: &str) -> Result<Self> {
+        serde_json::from_str(text).context("parsing settings JSON")
+    }
+
     /// Reads a settings file. Missing keys fall back to [`Default`], so a
     /// partial file — or no file at all — is valid.
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading settings from {}", path.display()))?;
-        serde_json::from_str(&text)
+        Self::from_json_str(&text)
             .with_context(|| format!("parsing settings from {}", path.display()))
     }
 

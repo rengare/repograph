@@ -3,42 +3,41 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>repograph viewer</title>
+    <title>repograph — web viewer</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main>
-      <section id="import-panel" class="panel import">
-        <p class="eyebrow">REPOGRAPH / BROWSER</p>
-        <h1>Open a repository graph.</h1>
-        <p>Choose the files created by <code>rkg export</code>. They are parsed locally and never uploaded.</p>
-        <label>Edges <input id="edges-file" type="file" accept=".edges,.txt,text/plain" required /></label>
-        <label>Nodes <input id="nodes-file" type="file" accept=".tsv,text/tab-separated-values,text/plain" required /></label>
-        <div class="actions"><button id="open-graph" type="button">Open selected files</button><button id="open-example" type="button" class="secondary">Open bundled example</button></div>
+    <!-- Import screen: nothing renders until the user supplies files. -->
+    <section id="import-panel" class="import">
+      <div class="card">
+        <h1>repograph</h1>
+        <p>
+          Open a graph exported with <code>rkg export</code> — the
+          <code>repo.edges</code> and <code>nodes.tsv</code> pair. Everything runs
+          in your browser; nothing is uploaded.
+        </p>
+        <p class="note">
+          Rendering uses <strong>WebGPU</strong>. It works best in an up-to-date
+          <strong>Chrome or Edge (113+)</strong>, where WebGPU is on by default on
+          Windows and macOS — no setup needed. Firefox's WebGPU is early and much
+          slower today. Serve over <code>localhost</code> or HTTPS.
+        </p>
+        <label>Edges <input id="edges-file" type="file" accept=".edges,.txt,text/plain" /></label>
+        <label>Nodes <input id="nodes-file" type="file" accept=".tsv,text/tab-separated-values,text/plain" /></label>
+        <div class="actions">
+          <button id="open-graph" type="button">Open selected files</button>
+          <button id="open-example" type="button" class="secondary">Open bundled example</button>
+        </div>
         <p id="import-error" role="alert"></p>
-      </section>
+      </div>
+    </section>
 
-      <section id="viewer" hidden>
-        <canvas id="graph-canvas"></canvas>
-        <aside class="panel controls">
-          <p class="eyebrow">LOCAL GRAPH</p>
-          <p id="stats"></p>
-          <label>Find <input id="search" type="search" placeholder="name or path" /></label>
-          <select id="search-results" size="7" aria-label="Search results"></select>
-          <label>Selection depth <input id="selection-depth" type="range" min="0" max="8" value="1" /></label>
-          <label><input id="show-labels" type="checkbox" /> Labels</label>
-          <fieldset>
-            <legend>Visible kinds</legend>
-            <label><input id="show-dir" type="checkbox" checked /> Directories</label>
-            <label><input id="show-file" type="checkbox" checked /> Files</label>
-            <label><input id="show-doc" type="checkbox" checked /> Docs</label>
-            <label><input id="show-section" type="checkbox" checked /> Sections</label>
-            <label><input id="show-symbol" type="checkbox" checked /> Symbols</label>
-          </fieldset>
-        </aside>
-        <aside class="panel inspector"><p class="eyebrow">INSPECTOR</p><pre id="inspector">Select a node</pre></aside>
-      </section>
-    </main>
+    <!-- The viewer: winit/wgpu render the graph and egui panels into this canvas. -->
+    <section id="viewer" hidden>
+      <canvas id="graph-canvas" tabindex="0" aria-label="Graph view"></canvas>
+      <button id="reload" type="button" title="Open another graph">↻ New graph</button>
+    </section>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>

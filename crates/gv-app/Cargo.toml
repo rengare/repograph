@@ -20,12 +20,28 @@ anyhow.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
-env_logger.workspace = true
 glam.workspace = true
 log.workspace = true
-pollster.workspace = true
 wgpu.workspace = true
 winit.workspace = true
+# Instant that works on both native and wasm (falls back to std on native).
+web-time = "1.1"
+
+# Native-only: the CLI binary, blocking executor, and egui clipboard/windowing
+# addons (arboard; not wasm-buildable, so disabled in the workspace default).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger.workspace = true
+pollster.workspace = true
+egui-winit = { workspace = true, features = ["clipboard", "links", "wayland", "x11"] }
+
+# Web: async device init, panic hook, RNG backend, DOM access, and the wgpu wasm
+# shim that makes GPU handles Send+Sync on the single-threaded browser.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.4", features = ["wasm_js"] }
+web-sys = { version = "0.3", features = ["Document", "Window", "Element", "HtmlCanvasElement", "EventTarget"] }
 
 [dev-dependencies]
 gv-graph = { workspace = true, features = ["testing"] }

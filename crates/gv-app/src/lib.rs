@@ -7,6 +7,7 @@
 
 pub mod app;
 pub mod cli;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod headless;
 pub mod input;
 pub mod layout_slot;
@@ -15,16 +16,22 @@ pub use app::App;
 pub use cli::Cli;
 pub use layout_slot::LayoutSlot;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use gv_config::AppConfig;
-use gv_graph::{GraphData, loader, seed::SeedOptions};
+use gv_graph::{GraphData, seed::SeedOptions};
+#[cfg(not(target_arch = "wasm32"))]
+use gv_graph::loader;
+#[cfg(not(target_arch = "wasm32"))]
 use gv_layout::LayoutParams;
 
+#[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_SETTINGS: &str = "settings.json";
 
 /// Parses arguments, loads settings and the graph, and runs to completion.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run(cli: Cli) -> Result<()> {
     if cli.help {
         print!("{}", cli::USAGE);
@@ -54,6 +61,7 @@ pub fn run(cli: Cli) -> Result<()> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn run_windowed(
     config: AppConfig,
     graph: GraphData,
@@ -74,10 +82,30 @@ fn run_windowed(
     Ok(())
 }
 
+/// Web entry: builds the app around an already-loaded graph and spawns the winit
+/// event loop on the browser's `<canvas>`. Returns immediately — winit's web loop
+/// is driven by the browser, and GPU device creation completes asynchronously.
+#[cfg(target_arch = "wasm32")]
+pub fn run_web(
+    config: AppConfig,
+    graph: GraphData,
+    choice: gv_gui::LayoutChoice,
+    options: SeedOptions,
+) -> Result<()> {
+    use winit::platform::web::EventLoopExtWebSys;
+    let app = App::new(config, graph, choice, options)?;
+    let event_loop =
+        winit::event_loop::EventLoop::new().context("creating the winit event loop")?;
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    event_loop.spawn_app(app);
+    Ok(())
+}
+
 /// Reads the settings file, then lets CLI overrides shadow it.
 ///
 /// A missing settings file is not an error — the defaults stand — but a
 /// malformed one is, and so is a missing file the user named explicitly.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     let explicit = cli.settings.is_some();
     let path = settings_path(cli);
@@ -93,6 +121,7 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     Ok(config)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn settings_path(cli: &Cli) -> PathBuf {
     cli.settings
         .clone()
@@ -117,6 +146,7 @@ pub fn seed_options(config: &AppConfig, rng_seed: u64) -> SeedOptions {
 /// knowledge-graph sidecar (via [`loader::load_with_sidecar`]) and nodes are
 /// coloured by their kind instead of randomly — this is what turns the anonymous
 /// visualizer into a browsable repository map.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_graph(config: &AppConfig, options: SeedOptions) -> Result<GraphData> {
     let path = &config.edge_input;
     let mut graph = match &config.nodes_input {

@@ -1,9 +1,15 @@
 //! The winit `ApplicationHandler` and the frame loop.
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+// `web_time::Instant` is `std::time::Instant` on native and a
+// `performance.now()`-backed clock on wasm (where `std::time::Instant` panics).
+use web_time::Instant;
 
 use anyhow::{Context, Result};
 use gv_config::AppConfig;
@@ -30,6 +36,40 @@ struct Active {
     buffers: GraphBuffers,
     egui_state: egui_winit::State,
     egui_renderer: egui_wgpu::Renderer,
+}
+
+/// The window + GPU device produced by device init, awaiting assembly into
+/// [`Active`]. On native it is filled synchronously in `begin_init`; on the web
+/// the async `spawn_local` device request fills it a few frames later, and
+/// [`App::try_activate`] moves it into `Active` once present. Shared via `Rc` so
+/// the web future can write it after `begin_init` returns.
+struct PendingGpu {
+    window: Arc<Window>,
+    surface: wgpu::Surface<'static>,
+    context: GpuContext,
+}
+
+/// Id of the `<canvas>` the web build renders into (set in `web/index.html`).
+#[cfg(target_arch = "wasm32")]
+const CANVAS_ID: &str = "graph-canvas";
+
+/// Resizes the web window/surface to fill the browser viewport.
+///
+/// Renders at CSS resolution (device-pixel-ratio 1) rather than the physical
+/// backing store: a hi-DPI display multiplies the pixel and fragment-shader cost
+/// several-fold, which dominates the frame time on mobile-class GPUs. The trade is
+/// slightly softer edges for a much higher frame rate.
+#[cfg(target_arch = "wasm32")]
+fn fit_canvas_to_window(window: &Window) {
+    let Some(web) = web_sys::window() else {
+        return;
+    };
+    let width = web.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
+    let height = web.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(720.0);
+    let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(
+        width.max(1.0) as u32,
+        height.max(1.0) as u32,
+    ));
 }
 
 pub struct App {
@@ -64,6 +104,13 @@ pub struct App {
     settings_path: Option<PathBuf>,
 
     active: Option<Active>,
+    /// GPU state from a (possibly async) device request, moved into `active` by
+    /// `try_activate` once ready.
+    pending: Rc<RefCell<Option<PendingGpu>>>,
+    /// Web: receiver for an in-flight async node readback (the `map_async`
+    /// callback sends over a `Send` channel; the frame loop polls it).
+    #[cfg(target_arch = "wasm32")]
+    readback_rx: Option<std::sync::mpsc::Receiver<Vec<gv_graph::Node>>>,
     input: InputState,
     last_frame: Option<Instant>,
     frame_time: Duration,
@@ -269,6 +316,9 @@ impl App {
             edge_jump: None,
             settings_path: None,
             active: None,
+            pending: Rc::new(RefCell::new(None)),
+            #[cfg(target_arch = "wasm32")]
+            readback_rx: None,
             input: InputState::default(),
             last_frame: None,
             frame_time: Duration::ZERO,
@@ -355,8 +405,55 @@ impl App {
         let Some(active) = &self.active else {
             return Ok(());
         };
-        self.graph.nodes = pollster::block_on(active.buffers.read_nodes(&active.context))?;
+        // Native blocks on the readback (it only happens on a layout change / stop,
+        // not on the frame path). The browser can't block the main thread on the
+        // GPU, so the web build reads back asynchronously via `request_readback`
+        // (driven from the frame loop); here it is a no-op.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.graph.nodes = pollster::block_on(active.buffers.read_nodes(&active.context))?;
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = active;
+            self.request_readback();
+        }
         Ok(())
+    }
+
+    /// Web: kick a non-blocking GPU→host node readback if one isn't already in
+    /// flight. The `map_async` callback captures only a `Send` channel sender (GPU
+    /// handles are `Send` under the wasm shim); the frame loop polls the receiver
+    /// in [`Self::poll_readback`]. The continuous redraw from `about_to_wait`
+    /// drives that poll, so no explicit `request_redraw` is needed here.
+    #[cfg(target_arch = "wasm32")]
+    fn request_readback(&mut self) {
+        if !self.layout.is_gpu() || self.readback_rx.is_some() {
+            return;
+        }
+        let Some(active) = &self.active else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.readback_rx = Some(rx);
+        active
+            .buffers
+            .read_nodes_callback(&active.context, move |nodes| {
+                let _ = tx.send(nodes);
+            });
+    }
+
+    /// Web: if a readback has finished, adopt the pulled positions.
+    #[cfg(target_arch = "wasm32")]
+    fn poll_readback(&mut self) {
+        if let Some(rx) = &self.readback_rx {
+            if let Ok(nodes) = rx.try_recv() {
+                if nodes.len() == self.graph.nodes.len() {
+                    self.graph.nodes = nodes;
+                }
+                self.readback_rx = None;
+            }
+        }
     }
 
     pub fn apply_gui_actions(&mut self, actions: GuiActions) -> Result<()> {
@@ -638,7 +735,10 @@ impl App {
             .is_none_or(|m| self.search.visible.allows(m.kind))
     }
 
-    fn init(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+    /// Creates the window + surface and requests the GPU device. On native the
+    /// device is awaited synchronously; on the web the request is spawned and its
+    /// result lands in `self.pending`, adopted later by [`Self::try_activate`].
+    fn begin_init(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         let attributes = Window::default_attributes()
             .with_title(&self.config.name)
             .with_inner_size(winit::dpi::LogicalSize::new(
@@ -646,21 +746,102 @@ impl App {
                 self.config.height,
             ));
 
+        // On the web the window is the existing `<canvas>` element.
+        #[cfg(target_arch = "wasm32")]
+        let attributes = {
+            use wasm_bindgen::JsCast;
+            use winit::platform::web::WindowAttributesExtWebSys;
+            let canvas = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(CANVAS_ID))
+                .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok());
+            attributes.with_canvas(canvas)
+        };
+
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
                 .context("creating the window")?,
         );
 
-        // The adapter must come from the instance that owns the surface, so
-        // the instance is created here rather than inside GpuContext::new.
+        // Fill the browser viewport, and keep filling it as the window resizes.
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsCast;
+            fit_canvas_to_window(&window);
+            let on_resize = window.clone();
+            let closure = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+                fit_canvas_to_window(&on_resize);
+            });
+            if let Some(web) = web_sys::window() {
+                let _ = web.add_event_listener_with_callback(
+                    "resize",
+                    closure.as_ref().unchecked_ref(),
+                );
+            }
+            closure.forget(); // lives for the page's lifetime
+        }
+
+        // The adapter must come from the instance that owns the surface, so the
+        // instance is created here rather than inside GpuContext::new. Native
+        // reads the backend from the environment; the browser picks WebGPU (or
+        // WebGL as a fallback for surface creation, though the pipeline needs
+        // WebGPU).
+        #[cfg(not(target_arch = "wasm32"))]
         let instance = wgpu::Instance::new(
             wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(window.clone())),
         );
+        // WebGPU only: the graph pipeline binds storage buffers in the vertex
+        // stage and the GPU layouts use compute, neither of which WebGL2 has.
+        // Forcing the backend makes a missing-WebGPU browser fail loudly at
+        // adapter request instead of silently falling back to GL and rendering
+        // nothing.
+        // Only `BROWSER_WEBGPU` (not `GL`) so wgpu cannot fall back to a WebGL2
+        // adapter, which has no storage buffers and would render nothing.
+        #[cfg(target_arch = "wasm32")]
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::BROWSER_WEBGPU,
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            display: None,
+        });
+
         let surface = instance
             .create_surface(window.clone())
             .context("creating a surface for the window")?;
-        let context = pollster::block_on(GpuContext::from_instance(instance, Some(&surface)))?;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let context = pollster::block_on(GpuContext::from_instance(instance, Some(&surface)))?;
+            *self.pending.borrow_mut() = Some(PendingGpu { window, surface, context });
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let pending = self.pending.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                match GpuContext::from_instance(instance, Some(&surface)).await {
+                    Ok(context) => {
+                        let redraw = window.clone();
+                        *pending.borrow_mut() = Some(PendingGpu { window, surface, context });
+                        redraw.request_redraw();
+                    }
+                    Err(error) => log::error!("GPU init failed: {error:#}"),
+                }
+            });
+        }
+        Ok(())
+    }
+
+    /// Moves a ready [`PendingGpu`] into [`Active`], building the buffers,
+    /// renderer, layout, and egui state. A no-op until the device is ready.
+    fn try_activate(&mut self) -> Result<()> {
+        if self.active.is_some() {
+            return Ok(());
+        }
+        let Some(PendingGpu { window, surface, context }) = self.pending.borrow_mut().take() else {
+            return Ok(());
+        };
 
         let size = window.inner_size();
         let buffers = GraphBuffers::upload(&context, &self.graph)?;
@@ -674,8 +855,20 @@ impl App {
         )?;
 
         // Now that there is a device, the picker's choice can be honoured for
-        // real — this is where a GPU layout actually gets built.
-        self.layout = LayoutSlot::for_choice(self.choice, Some((&context, &buffers)))?;
+        // real — this is where a GPU layout actually gets built. If a GPU layout
+        // fails to build (e.g. a compute limitation on some web devices), fall
+        // back to the CPU force layout so the viewer still starts.
+        self.layout = match LayoutSlot::for_choice(self.choice, Some((&context, &buffers))) {
+            Ok(slot) => slot,
+            Err(error) => {
+                log::error!(
+                    "layout {:?} failed to build ({error:#}); falling back to F-R cpu",
+                    self.choice
+                );
+                self.choice = LayoutChoice::FrCpu;
+                LayoutSlot::for_choice(self.choice, Some((&context, &buffers)))?
+            }
+        };
         log::info!(
             "layout: {} ({})",
             self.layout.name(),
@@ -684,12 +877,19 @@ impl App {
 
         self.camera.resize(size.width, size.height);
 
+        // The web build renders at CSS resolution (see `fit_canvas_to_window`), so
+        // egui must paint at 1 point/pixel to match; native uses the real DPI.
+        #[cfg(target_arch = "wasm32")]
+        let egui_scale = Some(1.0);
+        #[cfg(not(target_arch = "wasm32"))]
+        let egui_scale = Some(window.scale_factor() as f32);
+
         let egui_context = egui::Context::default();
         let egui_state = egui_winit::State::new(
             egui_context,
             egui::ViewportId::ROOT,
             &window,
-            Some(window.scale_factor() as f32),
+            egui_scale,
             None,
             None,
         );
@@ -719,9 +919,17 @@ impl App {
     /// Compute and draw share one `CommandEncoder`, so a GPU layout step and
     /// the frame it produces reach the queue in a single submission.
     pub fn frame(&mut self) -> Result<()> {
+        // Adopt the GPU device once its (possibly async) request has completed.
+        if self.active.is_none() {
+            self.try_activate()?;
+        }
         if self.active.is_none() {
             return Ok(());
         }
+
+        // Web: adopt any finished async GPU→host readback before it is used.
+        #[cfg(target_arch = "wasm32")]
+        self.poll_readback();
 
         // The layout just stopped: refresh host node state from the GPU so the
         // labels — hidden while it ran — reappear on the settled positions.
@@ -918,10 +1126,10 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.active.is_some() {
+        if self.active.is_some() || self.pending.borrow().is_some() {
             return;
         }
-        if let Err(error) = self.init(event_loop) {
+        if let Err(error) = self.begin_init(event_loop) {
             log::error!("{error:#}");
             event_loop.exit();
         }
@@ -1016,6 +1224,10 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(active) = &self.active {
             active.window.request_redraw();
+        } else if let Some(pending) = self.pending.borrow().as_ref() {
+            // Device ready but not yet activated: drive one more frame so
+            // `try_activate` runs.
+            pending.window.request_redraw();
         }
     }
 }

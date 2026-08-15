@@ -39,7 +39,12 @@ impl GpuContext {
                 compatible_surface: surface,
             })
             .await
-            .context("no GPU adapter available; set WGPU_BACKEND to try another backend")?;
+            .context(if cfg!(target_arch = "wasm32") {
+                "no WebGPU adapter — enable WebGPU (Chrome/Edge 113+, or Firefox with \
+                 dom.webgpu.enabled) and serve over https or localhost"
+            } else {
+                "no GPU adapter available; set WGPU_BACKEND to try another backend"
+            })?;
 
         let info = adapter.get_info();
         log::info!("adapter: {} ({:?}, {:?})", info.name, info.device_type, info.backend);

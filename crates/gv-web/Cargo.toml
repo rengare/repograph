@@ -7,23 +7,14 @@ edition.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+gv-app.workspace = true
+gv-config.workspace = true
 gv-graph.workspace = true
+gv-gui.workspace = true
 
-console_error_panic_hook = "0.1"
-getrandom = { version = "0.4", features = ["wasm_js"] }
-js-sys = "0.3"
+anyhow.workspace = true
+log.workspace = true
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = [
-  "CanvasRenderingContext2d",
-  "Document",
-  "Element",
-  "Event",
-  "EventTarget",
-  "HtmlCanvasElement",
-  "HtmlInputElement",
-  "HtmlSelectElement",
-  "MouseEvent",
-  "Node",
-  "WheelEvent",
-  "Window",
-] }
+console_error_panic_hook = "0.1"
+console_log = "1"
+getrandom = { version = "0.4", features = ["wasm_js"] }

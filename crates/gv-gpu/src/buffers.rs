@@ -149,6 +149,47 @@ impl GraphBuffers {
         Ok(nodes)
     }
 
+    /// Web: non-blocking node readback. [`read_nodes`](Self::read_nodes) blocks the
+    /// device with `poll(wait_indefinitely)`, which the browser forbids; here the
+    /// `map_async` callback (carrying no `Send` bound on wasm) delivers the pulled
+    /// nodes once the browser resolves the mapping.
+    #[cfg(target_arch = "wasm32")]
+    pub fn read_nodes_callback(
+        &self,
+        context: &GpuContext,
+        done: impl FnOnce(Vec<Node>) + Send + 'static,
+    ) {
+        if self.node_count == 0 {
+            done(Vec::new());
+            return;
+        }
+        let bytes = u64::from(self.node_count) * size_of::<Node>() as u64;
+        let staging = context.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("node readback"),
+            size: bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("node readback"),
+            });
+        encoder.copy_buffer_to_buffer(&self.nodes, 0, &staging, 0, bytes);
+        context.queue.submit([encoder.finish()]);
+
+        let mapped = staging.clone();
+        staging.slice(..).map_async(wgpu::MapMode::Read, move |result| {
+            if result.is_ok() {
+                let view = mapped.slice(..).get_mapped_range();
+                let nodes = bytemuck::cast_slice::<u8, Node>(&view).to_vec();
+                drop(view);
+                mapped.unmap();
+                done(nodes);
+            }
+        });
+    }
+
     /// Bytes the buffers will occupy for a graph of this shape.
     pub fn byte_size(node_count: u64, edge_count: u64) -> u64 {
         node_count * size_of::<Node>() as u64

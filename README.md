@@ -187,15 +187,26 @@ updated. It runs entirely in the browser: choose the `repo.edges` and `nodes.tsv
 files produced by `rkg export`, and neither file is uploaded anywhere. The import
 screen also has a bundled graph of this repository for a quick preview.
 
-The initial web renderer provides pan/zoom, search, kind filters, node inspection,
-labels, and depth-based selection highlighting. It reads the same exported formats as
-the desktop viewer, so artifacts can be moved between the two without conversion.
+The web viewer is the **desktop viewer compiled to WebAssembly** — the same
+wgpu/**WebGPU** renderer, egui panels, camera, click-to-inspect, edge-hopping, kind
+filters, labels, and CPU/GPU force layouts, not a separate 2D reimplementation. It reads
+the same exported formats as the desktop, so artifacts move between the two unchanged.
 
-For local web development, build the WASM package and serve the `web/` directory with
-any static-file server:
+Because it renders with WebGPU (the graph pipeline binds storage buffers in the vertex
+stage and the GPU layouts use compute), it needs a **WebGPU-capable browser**, served over
+`localhost` or HTTPS. **Use an up-to-date Chrome or Edge (113+)** — WebGPU is on by default
+there on **Windows and macOS**, and on the same GPU it matches the desktop's frame rate. On
+**Linux** you may need to enable it (`chrome://flags/#enable-unsafe-webgpu` and, since Linux
+uses the Vulkan backend, `#enable-vulkan`). **Firefox's WebGPU is early** — it works
+(Nightly + `dom.webgpu.enabled`) but is currently much slower, so Chrome/Edge is
+recommended. The import screen detects your browser and shows the right steps.
+
+For local web development, build the WASM package and serve the `web/` directory with any
+static-file server, then open it in a WebGPU browser:
 
 ```sh
 wasm-pack build crates/gv-web --target web --dev --out-dir ../../web/pkg
+python3 -m http.server -d web 8080   # then open http://localhost:8080
 ```
 
 ## MCP server — query the graph from coding agents
