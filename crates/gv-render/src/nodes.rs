@@ -42,7 +42,9 @@ impl NodePipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: None,
+                    // The disc has a ~1px anti-aliased rim (see `fs_nodes`), so
+                    // the fragment alpha must actually blend against the scene.
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),

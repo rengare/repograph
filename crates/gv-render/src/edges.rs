@@ -35,7 +35,9 @@ impl EdgePipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
-                    blend: None,
+                    // Edges are translucent (see `fs_edges`) so dense cores read
+                    // as overlapping structure rather than a solid mass.
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -45,7 +47,9 @@ impl EdgePipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
+                // Edges are drawn first and translucent; not writing depth lets
+                // the opaque orbs drawn afterwards sit cleanly on top of them.
+                depth_write_enabled: Some(false),
                 depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: Default::default(),
                 bias: Default::default(),

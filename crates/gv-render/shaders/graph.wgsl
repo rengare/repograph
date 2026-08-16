@@ -46,7 +46,23 @@ struct NodeOut {
     // Position within the sprite, in -1..1. The fragment shader masks the
     // quad to a disc with it, as `circle.frag` did with `gl_PointCoord`.
     @location(1) offset: vec2<f32>,
+    // View-space z (negative in front of the camera). The fragment shader turns
+    // it into a gentle depth fog so distant nodes recede.
+    @location(2) view_z: f32,
 };
+
+// Depth fog: fade toward the (near-black) background between these view-space
+// distances, never dimming past `FOG_FLOOR`. Purely a depth cue; kept gentle so
+// it only nudges the far end of the scene rather than darkening it.
+const FOG_NEAR = 1500.0;
+const FOG_FAR = 9000.0;
+const FOG_FLOOR = 0.7;
+
+fn depth_fog(view_z: f32) -> f32 {
+    let dist = -view_z;
+    let t = smoothstep(FOG_NEAR, FOG_FAR, dist);
+    return mix(1.0, FOG_FLOOR, t);
+}
 
 // Two triangles. A triangle strip would join consecutive nodes into one
 // connected ribbon, so this is a triangle list with the corners repeated.
@@ -74,6 +90,7 @@ fn vs_nodes(@builtin(vertex_index) vertex_index: u32) -> NodeOut {
 
     out.color = vec4<f32>(node.color.rgb * dim[node_index], node.color.a);
     out.offset = corner;
+    out.view_z = view_position.z;
 
     // Filtered out by kind, or behind the camera (where -view_z would flip the
     // sprite inside out): nothing to draw.
@@ -95,20 +112,50 @@ fn vs_nodes(@builtin(vertex_index) vertex_index: u32) -> NodeOut {
     return out;
 }
 
+// A fixed key light, roughly top-left and toward the viewer, giving every orb
+// the same highlight so the lit direction reads consistently.
+const LIGHT_DIR = vec3<f32>(-0.5, 0.6, 0.8);
+
 @fragment
 fn fs_nodes(in: NodeOut) -> @location(0) vec4<f32> {
-    // The disc mask. `circle.frag` compared against 0.5 because gl_PointCoord
-    // runs 0..1; this offset runs -1..1, so the radius is 1.
-    if (length(in.offset) > 1.0) {
+    // The disc, but with a ~1px anti-aliased rim from the screen-space
+    // derivative instead of `circle.frag`'s hard `> 0.5` cutoff. `offset` runs
+    // -1..1, so the radius is 1.
+    let r = length(in.offset);
+    let edge = fwidth(r);
+    let mask = 1.0 - smoothstep(1.0 - edge, 1.0, r);
+    if (mask <= 0.0) {
         discard;
     }
-    return in.color;
+
+    // Fake a hemisphere normal from the disc coord so the flat sprite reads as a
+    // sphere: z is the height of the dome above the quad at this radius.
+    let normal = vec3<f32>(in.offset, sqrt(max(0.0, 1.0 - r * r)));
+    let light = normalize(LIGHT_DIR);
+    let ndl = max(dot(normal, light), 0.0);
+
+    // Soft Lambert with a high ambient floor so the kind colour stays bright and
+    // recognisable even on the shadowed side, plus a small specular glint. The
+    // shading only lifts the lit side above the base colour, never darkens below
+    // ~0.8 of it.
+    let diffuse = 0.8 + 0.35 * ndl;
+    let specular = pow(ndl, 24.0) * 0.5;
+    let lit = in.color.rgb * diffuse + vec3<f32>(specular);
+
+    let shaded = lit * depth_fog(in.view_z);
+    return vec4<f32>(shaded, in.color.a * mask);
 }
 
 struct EdgeOut {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) view_z: f32,
 };
+
+// Edges are drawn translucent so dense cores read as overlapping structure
+// rather than a solid wall of colour — but kept fairly opaque so a lone edge
+// against the dark background stays clearly visible.
+const EDGE_ALPHA = 0.7;
 
 // No vertex buffer and no per-step copy: the edge is derived from the vertex
 // index, the endpoint id is read out of `edges`, and the position out of
@@ -127,6 +174,7 @@ fn vs_edges(@builtin(vertex_index) vertex_index: u32) -> EdgeOut {
     // every edge whose endpoints enter the neighborhood becomes fully bright.
     let edge_dim = min(dim[edge.tail], dim[edge.head]);
     out.color = vec4<f32>(node.color.rgb * edge_dim, node.color.a);
+    out.view_z = view_position.z;
 
     // Hide the edge if either endpoint's kind is filtered out, or is behind
     // the camera.
@@ -141,5 +189,6 @@ fn vs_edges(@builtin(vertex_index) vertex_index: u32) -> EdgeOut {
 
 @fragment
 fn fs_edges(in: EdgeOut) -> @location(0) vec4<f32> {
-    return in.color;
+    let rgb = in.color.rgb * depth_fog(in.view_z);
+    return vec4<f32>(rgb, in.color.a * EDGE_ALPHA);
 }
