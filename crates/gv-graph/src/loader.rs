@@ -140,9 +140,23 @@ fn parse_sidecar(text: &str) -> Result<Vec<NodeMeta>> {
         let symbol_kind = optional(cols.next());
         let container = optional(cols.next());
         let doc = optional(cols.next());
-        let locals = optional(cols.next())
-            .map(|s| s.split_whitespace().map(str::to_owned).collect())
-            .unwrap_or_default();
+        let split_names = |c: Option<&str>| -> Vec<String> {
+            c.filter(|s| !s.is_empty())
+                .map(|s| s.split_whitespace().map(str::to_owned).collect())
+                .unwrap_or_default()
+        };
+        let locals = split_names(cols.next());
+        let calls = split_names(cols.next());
+        let role = optional(cols.next());
+        // A leading `~` marks a locally-inferred (vs declared) return type.
+        let (returns, returns_inferred) = match optional(cols.next()) {
+            Some(s) => match s.strip_prefix('~') {
+                Some(rest) => (Some(rest.to_owned()), true),
+                None => (Some(s), false),
+            },
+            None => (None, false),
+        };
+        let description = optional(cols.next());
 
         let index: usize = index
             .parse()
@@ -161,6 +175,11 @@ fn parse_sidecar(text: &str) -> Result<Vec<NodeMeta>> {
                 container,
                 doc,
                 locals,
+                calls,
+                role,
+                returns,
+                returns_inferred,
+                description,
             },
         ));
     }

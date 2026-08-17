@@ -114,6 +114,39 @@ pub struct Span {
     pub end_line: u32,
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// A type on a parameter or return value — either declared in the source or
+/// derived by local, single-function heuristic inference (never cross-file).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypeRef {
+    pub ty: String,
+    /// True when guessed from local syntax (a literal or constructor call) rather
+    /// than read from a source annotation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub inferred: bool,
+}
+
+impl TypeRef {
+    pub fn declared(ty: impl Into<String>) -> Self {
+        TypeRef { ty: ty.into(), inferred: false }
+    }
+
+    pub fn inferred(ty: impl Into<String>) -> Self {
+        TypeRef { ty: ty.into(), inferred: true }
+    }
+}
+
+/// A function parameter: its name and, when known, its type.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Param {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ty: Option<TypeRef>,
+}
+
 /// One node with its metadata. Everything past `name` is optional context an AI
 /// consumer can use without opening the file; `signature`/`summary`/`span` fill in
 /// for symbols and docs.
@@ -144,6 +177,24 @@ pub struct Node {
     /// Variable names declared in a symbol's scope (parameters + local declarations).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub locals: Vec<String>,
+    /// Callee names invoked in a symbol's body (call-position identifiers) — the
+    /// strongest structural signal of what the code does.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<String>,
+    /// Heuristic role of a symbol: `constructor`, `accessor`, `predicate`,
+    /// `handler`, `test`, `factory`, `converter`, `io`, `entrypoint`, `mutator`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Parameters with optional (declared or locally inferred) types.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<Param>,
+    /// Return type, declared or locally inferred.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub returns: Option<TypeRef>,
+    /// A synthesized one-line description of what the symbol does, filled in only
+    /// when no real doc comment (`summary`) is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Lines of content, 0 for structural nodes.
     #[serde(default)]
     pub loc: u32,
@@ -165,6 +216,11 @@ impl Node {
             signature: None,
             summary: None,
             locals: Vec::new(),
+            calls: Vec::new(),
+            role: None,
+            params: Vec::new(),
+            returns: None,
+            description: None,
             loc: 0,
         }
     }
@@ -255,6 +311,12 @@ impl Graph {
 
     pub fn node(&self, id: &str) -> Option<&Node> {
         self.index.get(id).map(|&i| &self.nodes[i])
+    }
+
+    /// Mutable access to an existing node (e.g. to fill in a derived summary after
+    /// the node was first inserted).
+    pub fn node_mut(&mut self, id: &str) -> Option<&mut Node> {
+        self.index.get(id).map(|&i| &mut self.nodes[i])
     }
 
     pub fn contains(&self, id: &str) -> bool {

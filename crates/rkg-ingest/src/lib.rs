@@ -160,6 +160,17 @@ fn add_file_symbols(
         node.signature = Some(sym.signature.clone());
         node.summary = sym.doc.clone();
         node.locals = sym.locals.clone();
+        node.calls = sym.calls.clone();
+        node.params = sym.params.clone();
+        node.returns = sym.returns.clone();
+        // Role, plus a synthesised description that only fills in for the
+        // undocumented case (never clobbering a real doc comment in `summary`).
+        let role = symbols::classify_role(&sym);
+        node.description = match &sym.doc {
+            Some(_) => None,
+            None => symbols::synthesize_description(&sym, role.as_deref()),
+        };
+        node.role = role;
         node.loc = sym.end_line.saturating_sub(sym.start_line) + 1;
         graph.add_node(node);
         graph.add_edge(Edge::new(file_id.clone(), id.clone(), EdgeKind::Defines));
@@ -176,7 +187,69 @@ fn add_file_symbols(
                 }
             }
         }
+        // Now that `Calls` callees are captured distinctly, emit the (previously
+        // reserved) call edges for those that resolve to an in-file definition.
+        for callee in &sym.calls {
+            if let Some(target) = name_to_id.get(callee) {
+                if target != id {
+                    graph.add_edge(Edge::new(id.clone(), target.clone(), EdgeKind::Calls));
+                }
+            }
+        }
     }
+
+    // A module rollup on the file node so "what does this module do" is answerable
+    // without opening it: kind counts, top-level names, and imported files.
+    let import_names: Vec<String> = graph
+        .out_edges(&file_id)
+        .filter(|e| e.kind == EdgeKind::Imports)
+        .filter_map(|e| graph.node(&e.to))
+        .map(|n| n.name.clone())
+        .collect();
+    let syms: Vec<&SymbolDef> = created.iter().map(|(s, _)| s).collect();
+    if let Some(rollup) = file_rollup(&syms, &import_names) {
+        if let Some(file) = graph.node_mut(&file_id) {
+            file.summary = Some(rollup);
+        }
+    }
+}
+
+/// A one-line module summary: `"3 fn, 2 struct; defines build, Csr; imports path"`.
+/// `None` for an empty file (nothing to summarise).
+fn file_rollup(syms: &[&SymbolDef], import_names: &[String]) -> Option<String> {
+    if syms.is_empty() && import_names.is_empty() {
+        return None;
+    }
+    let mut parts: Vec<String> = Vec::new();
+
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for s in syms {
+        *counts.entry(s.kind.as_str()).or_default() += 1;
+    }
+    if !counts.is_empty() {
+        let cs: Vec<String> = counts.iter().map(|(k, n)| format!("{n} {k}")).collect();
+        parts.push(cs.join(", "));
+    }
+
+    let mut tops: Vec<&str> = syms
+        .iter()
+        .filter(|s| s.container.is_none())
+        .map(|s| s.name.as_str())
+        .collect();
+    tops.dedup();
+    if !tops.is_empty() {
+        let shown = tops.iter().take(8).copied().collect::<Vec<_>>().join(", ");
+        let more = tops.len().saturating_sub(8);
+        let suffix = if more > 0 { format!(", +{more}") } else { String::new() };
+        parts.push(format!("defines {shown}{suffix}"));
+    }
+
+    if !import_names.is_empty() {
+        let shown = import_names.iter().take(6).map(String::as_str).collect::<Vec<_>>().join(", ");
+        parts.push(format!("imports {shown}"));
+    }
+
+    Some(parts.join("; "))
 }
 
 /// Adds a `Contains` edge from `rel`'s parent directory to `rel`.

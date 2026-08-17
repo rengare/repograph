@@ -6,7 +6,7 @@ use std::collections::{BinaryHeap, HashMap, VecDeque};
 
 use serde::Serialize;
 
-use crate::{EdgeKind, Graph, Node, NodeId, NodeKind};
+use crate::{EdgeKind, Graph, Node, NodeId, NodeKind, Param, TypeRef};
 
 /// Which direction to traverse edges in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -179,6 +179,21 @@ pub struct ContextEntry {
     pub summary: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub locals: Vec<String>,
+    /// Callee names invoked in the body — what this code does.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<String>,
+    /// Heuristic behavioural role.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Parameters with declared-or-inferred types.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<Param>,
+    /// Return type, declared or locally inferred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub returns: Option<TypeRef>,
+    /// Synthesised "what it does" line for undocumented symbols.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Hops from the seed (0 = the seed itself).
     pub distance: u32,
     /// Human-readable reason this entry earned its place.
@@ -202,7 +217,15 @@ fn estimate_tokens(node: &Node) -> u32 {
         + node.name.len()
         + node.path.len()
         + node.signature.as_deref().map_or(0, str::len)
-        + node.summary.as_deref().map_or(0, str::len);
+        + node.summary.as_deref().map_or(0, str::len)
+        + node.description.as_deref().map_or(0, str::len)
+        + node.calls.iter().map(|c| c.len() + 1).sum::<usize>()
+        + node
+            .params
+            .iter()
+            .map(|p| p.name.len() + p.ty.as_ref().map_or(0, |t| t.ty.len()) + 2)
+            .sum::<usize>()
+        + node.returns.as_ref().map_or(0, |t| t.ty.len());
     (chars / 4).max(1) as u32
 }
 
@@ -289,6 +312,11 @@ pub fn context_pack(graph: &Graph, seed: &str, token_budget: u32) -> Option<Cont
             signature: node.signature.clone(),
             summary: node.summary.clone(),
             locals: node.locals.clone(),
+            calls: node.calls.clone(),
+            role: node.role.clone(),
+            params: node.params.clone(),
+            returns: node.returns.clone(),
+            description: node.description.clone(),
             distance: hop,
             reason,
             est_tokens: est,

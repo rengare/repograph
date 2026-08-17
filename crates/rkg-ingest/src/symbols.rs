@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
+use rkg_core::{Param, TypeRef};
 use tree_sitter::{Node, Parser};
 
 use crate::registry::{self, DocStrategy, SymbolSpec};
@@ -34,6 +35,13 @@ pub struct SymbolDef {
     /// Variable names declared in this symbol's scope — its parameters and local
     /// declarations (not those of nested functions). Empty for non-scoped symbols.
     pub locals: Vec<String>,
+    /// Distinct callee names invoked in call position inside the body (a subset of
+    /// `refs` restricted to calls/constructions) — what this code does.
+    pub calls: Vec<String>,
+    /// Parameters with optional declared-or-inferred types.
+    pub params: Vec<Param>,
+    /// Return type, declared (from the grammar) or locally inferred from the body.
+    pub returns: Option<TypeRef>,
 }
 
 /// Owns one parser per language tag, reused across files.
@@ -137,6 +145,12 @@ fn build_symbol(node: Node, name: &str, spec: &SymbolSpec, src: &[u8]) -> Symbol
     let mut refs: Vec<String> = refs.into_iter().collect();
     refs.sort_unstable();
 
+    let mut calls_set = HashSet::new();
+    gather_calls(node, spec, src, name, &mut calls_set);
+    let mut calls: Vec<String> = calls_set.into_iter().collect();
+    calls.sort_unstable();
+    calls.truncate(100);
+
     SymbolDef {
         name: name.to_string(),
         kind: kind_label(node.kind()).to_string(),
@@ -147,6 +161,9 @@ fn build_symbol(node: Node, name: &str, spec: &SymbolSpec, src: &[u8]) -> Symbol
         end_line: node.end_position().row as u32 + 1,
         refs,
         locals: collect_locals(node, spec, src, name),
+        calls,
+        params: extract_params(node, src),
+        returns: return_of(node, spec, src),
     }
 }
 
@@ -442,6 +459,342 @@ fn gather_refs(
     }
 }
 
+/// Collects callee names in call position inside `node` — the identifier being
+/// called in a `call_kinds` node — so `calls` captures behaviour rather than every
+/// mentioned identifier. Excludes the symbol's own name (direct recursion).
+fn gather_calls(node: Node, spec: &SymbolSpec, src: &[u8], own: &str, out: &mut HashSet<String>) {
+    if out.len() >= 100 {
+        return;
+    }
+    if spec.call_kinds.contains(&node.kind()) {
+        if let Some(name) = callee_name(node, src) {
+            if name != own {
+                out.insert(name);
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        gather_calls(child, spec, src, own, out);
+    }
+}
+
+/// The final identifier segment being called: `read`, `Config` from `Config::new`,
+/// `push` from `v.push`. `None` for computed/odd callees.
+fn callee_name(call: Node, src: &[u8]) -> Option<String> {
+    let callee = call
+        .child_by_field_name("function")
+        .or_else(|| call.child_by_field_name("constructor"))
+        .or_else(|| call.child_by_field_name("macro"))
+        .or_else(|| call.child_by_field_name("name"))
+        .or_else(|| call.named_child(0))?;
+    last_segment(callee.utf8_text(src).ok()?)
+}
+
+/// The last `.`/`::`-separated segment of a path, stripped of any generic/call
+/// tail, if it is a plain identifier.
+fn last_segment(text: &str) -> Option<String> {
+    let seg = text.split(['.', ':']).filter(|s| !s.is_empty()).next_back()?;
+    let seg = seg.split(['<', '(', '!', '[']).next().unwrap_or(seg).trim();
+    (!seg.is_empty() && seg.chars().all(|c| c.is_alphanumeric() || c == '_')).then(|| seg.to_string())
+}
+
+/// Parameters of a definition with their names and, when knowable, types (declared
+/// annotation first, else inferred from a default value). Reuses the same binding
+/// walk as scope locals; unnamed/`self` params are skipped.
+fn extract_params(node: Node, src: &[u8]) -> Vec<Param> {
+    let Some(params) = find_params(node) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut cursor = params.walk();
+    for param in params.children(&mut cursor) {
+        if !param.is_named() || out.len() >= 50 {
+            continue;
+        }
+        if matches!(param.kind(), "self_parameter" | "this") {
+            continue;
+        }
+        let mut names = HashSet::new();
+        match param.kind() {
+            "identifier" | "shorthand_property_identifier_pattern" => push_ident(param, src, &mut names),
+            _ => binding_names(param, src, &mut names),
+        }
+        let ty = param_type(param, src);
+        let mut names: Vec<String> = names.into_iter().collect();
+        names.sort_unstable();
+        for name in names {
+            out.push(Param { name, ty: ty.clone() });
+        }
+    }
+    out
+}
+
+/// A parameter's type: a declared `type` field, else inference from its default
+/// value (`x = 5`, `y = Foo()`).
+fn param_type(param: Node, src: &[u8]) -> Option<TypeRef> {
+    if let Some(t) = param.child_by_field_name("type") {
+        if let Ok(text) = t.utf8_text(src) {
+            let s = clean_type(text);
+            if !s.is_empty() {
+                return Some(TypeRef::declared(s));
+            }
+        }
+    }
+    let default = param
+        .child_by_field_name("value")
+        .or_else(|| param.child_by_field_name("default"));
+    default.and_then(|v| infer_type(v, src))
+}
+
+/// A definition's return type: the declared `return_field` when present, else a
+/// best-effort inference from the body's return expressions.
+fn return_of(node: Node, spec: &SymbolSpec, src: &[u8]) -> Option<TypeRef> {
+    if let Some(field) = spec.return_field {
+        if let Some(rt) = node.child_by_field_name(field) {
+            if let Ok(text) = rt.utf8_text(src) {
+                let s = clean_type(text);
+                if !s.is_empty() {
+                    return Some(TypeRef::declared(s));
+                }
+            }
+        }
+    }
+    infer_return_from_body(node, spec, src)
+}
+
+/// Infers a return type when every `return <expr>` in the body (not counting
+/// nested definitions) infers to the *same* type; otherwise `None` (never guesses).
+fn infer_return_from_body(node: Node, spec: &SymbolSpec, src: &[u8]) -> Option<TypeRef> {
+    let body = node.child_by_field_name("body")?;
+    let mut agreed: Option<String> = None;
+    let mut consistent = true;
+    let mut saw_return = false;
+    collect_return_types(body, spec, src, &mut |ty| {
+        saw_return = true;
+        match &agreed {
+            None => agreed = Some(ty),
+            Some(prev) if *prev != ty => consistent = false,
+            _ => {}
+        }
+    });
+    match agreed {
+        Some(ty) if consistent && saw_return => Some(TypeRef::inferred(ty)),
+        _ => None,
+    }
+}
+
+/// Visits `return` statements under `node`, calling `sink` with each returned
+/// expression's inferred type. Stops at nested definitions (their returns are not
+/// this symbol's). A return whose value can't be inferred yields nothing.
+fn collect_return_types(
+    node: Node,
+    spec: &SymbolSpec,
+    src: &[u8],
+    sink: &mut impl FnMut(String),
+) {
+    if node.kind() == "return_statement" {
+        if let Some(value) = node.named_child(0) {
+            if let Some(t) = infer_type(value, src) {
+                sink(t.ty);
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        // Don't descend into a nested definition's own body.
+        if spec.defs.contains(&child.kind()) {
+            continue;
+        }
+        collect_return_types(child, spec, src, sink);
+    }
+}
+
+/// Best-effort, single-expression type inference from local syntax: literals and
+/// constructor/factory calls. Returns an `inferred` [`TypeRef`], or `None` when the
+/// expression is ambiguous (a variable, arithmetic, an unknown call, …).
+fn infer_type(expr: Node, src: &[u8]) -> Option<TypeRef> {
+    if let Some(ty) = constructor_type(expr, src) {
+        return Some(TypeRef::inferred(ty));
+    }
+    let k = expr.kind();
+    let label = if k == "true" || k == "false" || k == "boolean_literal" || k.contains("boolean") {
+        "bool"
+    } else if k.contains("float") {
+        "float"
+    } else if k.contains("char") && !k.contains("character_") {
+        "char"
+    } else if k == "string" || k.contains("string_literal") || k == "template_string"
+        || k == "raw_string_literal" || k == "interpolated_string_expression"
+    {
+        "string"
+    } else if k == "integer" || k == "integer_literal" || k == "int_literal"
+        || k == "decimal_integer_literal"
+    {
+        "int"
+    } else if k == "number" || k == "number_literal" {
+        "number"
+    } else if k == "array" || k.contains("array_") || k == "list" || k == "list_expression" {
+        "array"
+    } else if k == "object" || k == "dictionary" || k == "map_literal" || k.contains("dictionary") {
+        "map"
+    } else if k == "set" {
+        "set"
+    } else if k == "tuple" || k == "tuple_expression" {
+        "tuple"
+    } else {
+        return None;
+    };
+    Some(TypeRef::inferred(label))
+}
+
+/// The constructed type of a `new Foo()` / `Foo(...)` / `Foo::new(...)` expression,
+/// or `None` when it isn't a recognisable construction.
+fn constructor_type(expr: Node, src: &[u8]) -> Option<String> {
+    match expr.kind() {
+        "new_expression" | "object_creation_expression" => {
+            let ty = expr
+                .child_by_field_name("constructor")
+                .or_else(|| expr.child_by_field_name("type"))
+                .or_else(|| expr.named_child(0))?;
+            last_segment(ty.utf8_text(src).ok()?)
+        }
+        "call_expression" | "call" => {
+            let callee = expr
+                .child_by_field_name("function")
+                .or_else(|| expr.named_child(0))?;
+            constructor_from_callee(callee.utf8_text(src).ok()?)
+        }
+        _ => None,
+    }
+}
+
+/// Reads a callee path as a construction: `Foo::new`/`Foo.create` ⇒ `Foo`, or a
+/// single Uppercase callee `Foo(...)` ⇒ `Foo`. Lowercase free functions ⇒ `None`.
+fn constructor_from_callee(text: &str) -> Option<String> {
+    let segs: Vec<&str> = text.split(['.', ':']).filter(|s| !s.is_empty()).collect();
+    let last = *segs.last()?;
+    const CTOR_METHODS: &[&str] = &["new", "create", "from", "default", "with_capacity", "of", "make"];
+    if segs.len() >= 2 && CTOR_METHODS.contains(&last) {
+        if let Some(ty) = segs.iter().rev().skip(1).find(|s| starts_upper(s)) {
+            return last_segment(ty);
+        }
+    }
+    if segs.len() == 1 && starts_upper(last) {
+        return last_segment(last);
+    }
+    None
+}
+
+fn starts_upper(s: &str) -> bool {
+    s.chars().next().is_some_and(|c| c.is_uppercase())
+}
+
+/// Normalises a type annotation to a compact one-line form: leading `->`/`:`
+/// stripped, whitespace collapsed, capped.
+fn clean_type(text: &str) -> String {
+    let s = collapse_ws(text);
+    let s = s
+        .trim()
+        .trim_start_matches("->")
+        .trim()
+        .trim_start_matches(':')
+        .trim();
+    truncate(s, 80)
+}
+
+/// A heuristic behavioural role for a callable symbol, from its name (and, for
+/// tests, its container). `None` for types and unrecognised names — an honest
+/// "unknown" rather than a forced label.
+pub fn classify_role(sym: &SymbolDef) -> Option<String> {
+    if sym.kind == "constructor" {
+        return Some("constructor".to_string());
+    }
+    if !matches!(sym.kind.as_str(), "fn" | "method") {
+        return None;
+    }
+    let name = sym.name.as_str();
+    let lower = name.to_ascii_lowercase();
+    if lower.starts_with("test")
+        || lower.ends_with("_test")
+        || sym.container.as_deref().is_some_and(|c| c.contains("Test"))
+    {
+        return Some("test".to_string());
+    }
+    if lower == "main" {
+        return Some("entrypoint".to_string());
+    }
+    let role = match first_word(name).as_str() {
+        "new" | "make" | "create" | "build" | "construct" | "init" | "with" => "factory",
+        "get" | "fetch" | "find" | "lookup" | "peek" => "accessor",
+        "set" | "put" | "update" | "insert" | "add" | "remove" | "delete" | "push" | "pop"
+        | "clear" | "reset" | "append" => "mutator",
+        "is" | "has" | "can" | "should" | "contains" | "exists" | "equals" | "matches" => "predicate",
+        "to" | "into" | "as" | "from" | "parse" | "serialize" | "deserialize" | "convert"
+        | "format" | "encode" | "decode" | "render" => "converter",
+        "on" | "handle" => "handler",
+        "read" | "write" | "open" | "close" | "flush" | "print" | "send" | "recv" | "connect"
+        | "load" | "save" | "fetch_url" => "io",
+        _ => return None,
+    };
+    Some(role.to_string())
+}
+
+/// The first word of an identifier, lowercased — splitting on `_` (snake_case) or a
+/// lower→Upper boundary (camelCase/PascalCase). `parseConfig` ⇒ `parse`.
+fn first_word(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.trim_start_matches('_').chars() {
+        if c == '_' {
+            break;
+        }
+        if !out.is_empty()
+            && c.is_uppercase()
+            && out.chars().last().is_some_and(|p| p.is_lowercase())
+        {
+            break;
+        }
+        out.push(c);
+    }
+    out.to_ascii_lowercase()
+}
+
+/// A synthesised one-line description of what a callable does, from its role,
+/// typed params, return, and top callees. Used only when the symbol has no real
+/// doc comment. `None` when there's nothing meaningful to say.
+pub fn synthesize_description(sym: &SymbolDef, role: Option<&str>) -> Option<String> {
+    if !matches!(sym.kind.as_str(), "fn" | "method" | "constructor") {
+        return None;
+    }
+    if sym.params.is_empty() && sym.returns.is_none() && sym.calls.is_empty() && role.is_none() {
+        return None;
+    }
+    let mut s = match role {
+        Some(r) => format!("{} ({r})", sym.name),
+        None => sym.name.clone(),
+    };
+    if !sym.params.is_empty() {
+        let ps: Vec<String> = sym
+            .params
+            .iter()
+            .take(4)
+            .map(|p| match &p.ty {
+                Some(t) => format!("{}: {}", p.name, t.ty),
+                None => p.name.clone(),
+            })
+            .collect();
+        s.push_str(&format!(" takes {}", ps.join(", ")));
+    }
+    if let Some(ret) = &sym.returns {
+        s.push_str(&format!("; returns {}", ret.ty));
+    }
+    if !sym.calls.is_empty() {
+        let cs: Vec<&str> = sym.calls.iter().take(4).map(String::as_str).collect();
+        s.push_str(&format!("; calls {}", cs.join(", ")));
+    }
+    Some(truncate(&s, 240))
+}
+
 /// Strips comment markers (`/**`, `///`, `//!`, `//`, `*`, `*/`) from each line.
 fn clean_doc(text: &str) -> String {
     text.lines()
@@ -504,6 +857,76 @@ impl Csr {
         assert_eq!(build.doc.as_deref(), Some("Builds an adjacency."));
         assert_eq!(find(&syms, "len").container.as_deref(), Some("impl Csr"));
         assert_eq!(find(&syms, "Csr").kind, "struct");
+    }
+
+    #[test]
+    fn captures_calls_typed_params_and_declared_return() {
+        let mut ex = SymbolExtractor::new().unwrap();
+        let src = "\
+pub fn build(path: &str, n: usize) -> Csr {
+    let data = read(path);
+    parse(data)
+}
+";
+        let syms = ex.extract("rs", src);
+        let build = find(&syms, "build");
+
+        // Params carry their declared types (inferred = false).
+        let path = build.params.iter().find(|p| p.name == "path").expect("path param");
+        assert_eq!(path.ty.as_ref().unwrap().ty, "&str");
+        assert!(!path.ty.as_ref().unwrap().inferred);
+        let n = build.params.iter().find(|p| p.name == "n").expect("n param");
+        assert_eq!(n.ty.as_ref().unwrap().ty, "usize");
+
+        // Declared return type, from the grammar's return_type field.
+        let ret = build.returns.as_ref().expect("return type");
+        assert_eq!(ret.ty, "Csr");
+        assert!(!ret.inferred);
+
+        // `calls` holds call-position callees only — `read`/`parse`, not `data`.
+        assert!(build.calls.contains(&"read".to_string()), "calls: {:?}", build.calls);
+        assert!(build.calls.contains(&"parse".to_string()));
+        assert!(!build.calls.contains(&"data".to_string()));
+
+        assert_eq!(classify_role(build).as_deref(), Some("factory"));
+    }
+
+    #[test]
+    fn infers_python_types_roles_and_descriptions() {
+        let mut ex = SymbolExtractor::new().unwrap();
+        let src = "\
+def get_count(items):
+    return 5
+
+def make_store():
+    return Store()
+
+def find_it(x):
+    return x
+";
+        let syms = ex.extract("py", src);
+
+        // Return inferred from a literal.
+        let get = find(&syms, "get_count");
+        let ret = get.returns.as_ref().expect("inferred return");
+        assert_eq!(ret.ty, "int");
+        assert!(ret.inferred);
+        assert_eq!(classify_role(get).as_deref(), Some("accessor"));
+
+        // Return inferred from a constructor call.
+        let make = find(&syms, "make_store");
+        assert_eq!(make.returns.as_ref().unwrap().ty, "Store");
+        assert!(make.returns.as_ref().unwrap().inferred);
+        assert_eq!(classify_role(make).as_deref(), Some("factory"));
+
+        // Un-inferable return (a bare variable) stays None rather than guessing.
+        let find_it = find(&syms, "find_it");
+        assert!(find_it.returns.is_none());
+        assert_eq!(classify_role(find_it).as_deref(), Some("accessor"));
+
+        // Synthesised description only when there is no doc comment.
+        let desc = synthesize_description(get, Some("accessor")).expect("description");
+        assert!(desc.contains("get_count") && desc.contains("accessor"), "{desc}");
     }
 
     #[test]

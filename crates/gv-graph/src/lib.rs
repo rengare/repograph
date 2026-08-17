@@ -167,6 +167,16 @@ pub struct NodeMeta {
     pub doc: Option<String>,
     /// Variable names declared in the symbol's scope (space-separated in the sidecar).
     pub locals: Vec<String>,
+    /// Callee names invoked in the symbol's body (space-separated in the sidecar).
+    pub calls: Vec<String>,
+    /// Heuristic behavioural role (`accessor`, `mutator`, `predicate`, …).
+    pub role: Option<String>,
+    /// Return type, when declared or locally inferred.
+    pub returns: Option<String>,
+    /// True when `returns` was inferred from local syntax rather than declared.
+    pub returns_inferred: bool,
+    /// A synthesised "what it does" line, present only for undocumented symbols.
+    pub description: Option<String>,
 }
 
 /// A loaded graph: node state, edges, adjacency, and the original string ids.

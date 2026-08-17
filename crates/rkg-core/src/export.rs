@@ -67,7 +67,7 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
     let mut buf = Vec::new();
     writeln!(
         buf,
-        "# index\tid\tname\tkind\tpath\tspan\tsignature\tsymbol_kind\tcontainer\tdoc\tlocals"
+        "# index\tid\tname\tkind\tpath\tspan\tsignature\tsymbol_kind\tcontainer\tdoc\tlocals\tcalls\trole\treturns\tdescription"
     )?;
     for (i, n) in graph.nodes.iter().enumerate() {
         let span = n
@@ -88,12 +88,27 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
             .map(|l| sanitize_cell(l))
             .collect::<Vec<_>>()
             .join(" ");
+        let calls = n
+            .calls
+            .iter()
+            .map(|c| sanitize_cell(c))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let role = n.role.as_deref().unwrap_or("");
+        // A leading `~` marks a locally-inferred (vs declared) return type.
+        let returns = n
+            .returns
+            .as_ref()
+            .map(|t| if t.inferred { format!("~{}", t.ty) } else { t.ty.clone() })
+            .map(|s| sanitize_cell(&s))
+            .unwrap_or_default();
+        let description = n.description.as_deref().map(sanitize_cell).unwrap_or_default();
         let id = sanitize_cell(&n.id);
         let name = sanitize_cell(&n.name);
         let path = sanitize_cell(&n.path);
         writeln!(
             buf,
-            "{i}\t{id}\t{name}\t{}\t{path}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}\t{locals}",
+            "{i}\t{id}\t{name}\t{}\t{path}\t{span}\t{signature}\t{symbol_kind}\t{container}\t{doc}\t{locals}\t{calls}\t{role}\t{returns}\t{description}",
             n.kind.tag()
         )?;
     }
@@ -188,6 +203,38 @@ mod tests {
                 "row has too few columns ({cols}): {line:?}"
             );
         }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn nodes_tsv_round_trips_semantic_columns() {
+        use crate::{Param, TypeRef};
+        let mut g = Graph::new();
+        let mut n = Node::new(NodeKind::Symbol, "src/a.rs::build", "build");
+        n.calls = vec!["read".to_owned(), "parse".to_owned()];
+        n.role = Some("factory".to_owned());
+        n.returns = Some(TypeRef::inferred("Csr")); // inferred -> `~Csr` on the wire
+        n.params = vec![Param {
+            name: "path".to_owned(),
+            ty: Some(TypeRef::declared("&str")),
+        }];
+        n.description = Some("build (factory) takes path: &str; calls read, parse".to_owned());
+        g.add_node(n);
+
+        let dir = std::env::temp_dir().join(format!("rkg-tsv-rt-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("nodes.tsv");
+        write_nodes_tsv(&g, &path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+
+        // Read back through the viewer's own sidecar parser.
+        let gd = gv_graph::loader::from_exported_text("# from to\n", &text).unwrap();
+        let meta = gd.meta.iter().find(|m| m.name == "build").expect("build meta");
+        assert_eq!(meta.calls, vec!["read".to_owned(), "parse".to_owned()]);
+        assert_eq!(meta.role.as_deref(), Some("factory"));
+        assert_eq!(meta.returns.as_deref(), Some("Csr"));
+        assert!(meta.returns_inferred, "the ~ marker should decode to inferred=true");
+        assert!(meta.description.as_deref().unwrap().contains("factory"));
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -37,6 +37,13 @@ pub struct SymbolSpec {
     pub impl_kind: Option<&'static str>,
     /// Whether `const f = () => …` value-function declarators count as defs (JS/TS).
     pub value_fn_decl: bool,
+    /// Call/construction node kinds, so a symbol's outgoing `calls` (and `Calls`
+    /// edges) can be gathered from call-position identifiers only.
+    pub call_kinds: &'static [&'static str],
+    /// Grammar field naming a definition's return type, when the language annotates
+    /// one (`return_type` for Rust/TS/Python, `type` for C/Java/C#). `None` when the
+    /// language has no such field (types then come from local inference or nothing).
+    pub return_field: Option<&'static str>,
     pub doc: DocStrategy,
 }
 
@@ -86,6 +93,8 @@ pub static LANGUAGES: &[Language] = &[
             container_kinds: &["struct_item", "enum_item", "trait_item", "union_item", "mod_item"],
             impl_kind: Some("impl_item"),
             value_fn_decl: false,
+            call_kinds: &["call_expression", "macro_invocation"],
+            return_field: Some("return_type"),
             doc: DocStrategy::LineComments(RUSTDOC),
         },
         imports: Some(lang::rust::extract),
@@ -104,6 +113,8 @@ pub static LANGUAGES: &[Language] = &[
             container_kinds: &["class_declaration"],
             impl_kind: None,
             value_fn_decl: true,
+            call_kinds: &["call_expression", "new_expression"],
+            return_field: None,
             doc: DocStrategy::LineComments(JSDOC),
         },
         imports: Some(lang::js::extract),
@@ -133,6 +144,8 @@ pub static LANGUAGES: &[Language] = &[
             container_kinds: &["class_definition"],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["call"],
+            return_field: Some("return_type"),
             doc: DocStrategy::Docstring,
         },
         imports: Some(lang::python::extract),
@@ -151,6 +164,8 @@ pub static LANGUAGES: &[Language] = &[
             container_kinds: &["struct_specifier", "union_specifier"],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["call_expression"],
+            return_field: Some("type"),
             doc: DocStrategy::LineComments(XMLDOC),
         },
         imports: Some(lang::c::extract),
@@ -174,6 +189,8 @@ pub static LANGUAGES: &[Language] = &[
             ],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["call_expression", "new_expression"],
+            return_field: Some("type"),
             doc: DocStrategy::LineComments(XMLDOC),
         },
         imports: Some(lang::c::extract),
@@ -194,6 +211,8 @@ pub static LANGUAGES: &[Language] = &[
             ],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["method_invocation", "object_creation_expression"],
+            return_field: Some("type"),
             doc: DocStrategy::LineComments(JSDOC),
         },
         imports: Some(lang::java::extract),
@@ -209,6 +228,8 @@ pub static LANGUAGES: &[Language] = &[
             container_kinds: &["class_declaration", "object_declaration"],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["call_expression"],
+            return_field: None,
             doc: DocStrategy::LineComments(JSDOC),
         },
         imports: Some(lang::kotlin::extract),
@@ -231,6 +252,8 @@ pub static LANGUAGES: &[Language] = &[
             ],
             impl_kind: None,
             value_fn_decl: false,
+            call_kinds: &["invocation_expression", "object_creation_expression"],
+            return_field: Some("type"),
             doc: DocStrategy::LineComments(XMLDOC),
         },
         imports: Some(lang::csharp::extract),
@@ -249,6 +272,8 @@ const TS_SYMBOLS: SymbolSpec = SymbolSpec {
     container_kinds: &["class_declaration", "abstract_class_declaration", "interface_declaration"],
     impl_kind: None,
     value_fn_decl: true,
+    call_kinds: &["call_expression", "new_expression"],
+    return_field: Some("return_type"),
     doc: DocStrategy::LineComments(JSDOC),
 };
 
