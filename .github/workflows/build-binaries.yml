@@ -20,10 +20,6 @@ jobs:
             os: ubuntu-latest
             artifact: linux-x86_64
             suffix: ""
-          - name: macOS
-            os: macos-13
-            artifact: macos-x86_64
-            suffix: ""
           - name: macOS ARM64
             os: macos-14
             artifact: macos-aarch64
@@ -38,7 +34,7 @@ jobs:
             suffix: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux viewer dependencies
         if: runner.os == 'Linux'
@@ -54,7 +50,7 @@ jobs:
         run: cargo build --locked --release -p rkg-cli -p rkg-mcp -p gv-app
 
       - name: Upload release binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: repograph-${{ matrix.artifact }}
           if-no-files-found: error
