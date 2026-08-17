@@ -118,10 +118,17 @@ struct McpInstallArgs {
     /// Client to configure.
     #[arg(value_enum)]
     provider: McpProvider,
-    /// Repository root that receives the project-scoped configuration.
+    /// Project directory that receives the project-scoped configuration (any
+    /// directory — it need not be the repograph checkout).
     #[arg(long, default_value = ".")]
     project_dir: PathBuf,
-    /// Add configuration only; do not run `cargo install --path crates/rkg-mcp`.
+    /// repograph checkout to build `rkg-mcp` from with `cargo install --path
+    /// crates/rkg-mcp`. Defaults to the project directory when that is itself a
+    /// repograph checkout; otherwise the build is skipped and the config points at
+    /// an `rkg-mcp` already on your PATH.
+    #[arg(long)]
+    source: Option<PathBuf>,
+    /// Add configuration only; never build `rkg-mcp`.
     #[arg(long)]
     no_install: bool,
 }
@@ -146,25 +153,62 @@ fn main() -> Result<()> {
     }
 }
 
+/// A directory is a repograph checkout we can build the server from if it holds
+/// the `rkg-mcp` crate.
+fn is_repograph_source(dir: &Path) -> bool {
+    dir.join("crates/rkg-mcp/Cargo.toml").exists()
+}
+
+/// Whether an executable named `rkg-mcp` is resolvable on `PATH`.
+fn rkg_mcp_on_path() -> bool {
+    let name = if cfg!(windows) { "rkg-mcp.exe" } else { "rkg-mcp" };
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
+}
+
 fn install_mcp(args: McpInstallArgs) -> Result<()> {
+    // The project directory only receives config files; it need not be a Cargo
+    // workspace (that requirement was the reason this failed outside the checkout).
     let project_dir = args
         .project_dir
         .canonicalize()
         .with_context(|| format!("resolving project directory {}", args.project_dir.display()))?;
-    if !project_dir.join("Cargo.toml").exists() {
-        bail!("{} is not a Cargo workspace", project_dir.display());
-    }
 
-    if !args.no_install {
+    // Building the server needs a repograph checkout. Use --source if given, else
+    // the project dir when it happens to be one, else skip the build entirely.
+    let source = match &args.source {
+        Some(source) => {
+            let source = source
+                .canonicalize()
+                .with_context(|| format!("resolving --source {}", source.display()))?;
+            if !is_repograph_source(&source) {
+                bail!(
+                    "--source {} is not a repograph checkout (no crates/rkg-mcp/Cargo.toml)",
+                    source.display()
+                );
+            }
+            Some(source)
+        }
+        None => is_repograph_source(&project_dir).then(|| project_dir.clone()),
+    };
+
+    let built = if args.no_install {
+        false
+    } else if let Some(source) = &source {
         let status = ProcessCommand::new("cargo")
             .args(["install", "--locked", "--path", "crates/rkg-mcp"])
-            .current_dir(&project_dir)
+            .current_dir(source)
             .status()
             .context("running cargo install for rkg-mcp")?;
         if !status.success() {
             bail!("cargo install for rkg-mcp failed with {status}");
         }
-    }
+        true
+    } else {
+        false
+    };
 
     let path = match args.provider {
         McpProvider::Opencode => install_opencode(&project_dir)?,
@@ -173,6 +217,16 @@ fn install_mcp(args: McpInstallArgs) -> Result<()> {
         McpProvider::Junie => install_json_mcp(&project_dir.join(".junie/mcp/mcp.json"))?,
     };
     println!("configured {}", path.display());
+
+    // If we didn't build the server, the config points at whatever `rkg-mcp` is on
+    // PATH — warn if there isn't one so it doesn't silently fail to start later.
+    if !built && !rkg_mcp_on_path() {
+        eprintln!(
+            "note: `rkg-mcp` was not found on your PATH. Install it with `cargo install \
+             --locked --path crates/rkg-mcp` from your repograph checkout, or re-run with \
+             `--source <repograph-dir>`."
+        );
+    }
     Ok(())
 }
 
@@ -427,7 +481,7 @@ mod tests {
 
     static NEXT_TEMP_DIR: AtomicUsize = AtomicUsize::new(0);
 
-    fn temp_project() -> PathBuf {
+    fn temp_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!(
             "rkg-cli-mcp-{}-{}",
             std::process::id(),
@@ -435,8 +489,48 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn temp_project() -> PathBuf {
+        let path = temp_dir();
         fs::write(path.join("Cargo.toml"), "[workspace]\n").unwrap();
         path
+    }
+
+    #[test]
+    fn configures_a_project_that_is_not_a_cargo_workspace() {
+        // The reported bug: running the installer outside the repograph checkout
+        // must still write config. `--no-install` keeps the build out of the test.
+        let project = temp_dir();
+        assert!(!project.join("Cargo.toml").exists());
+
+        install_mcp(McpInstallArgs {
+            provider: McpProvider::ClaudeCode,
+            project_dir: project.clone(),
+            source: None,
+            no_install: true,
+        })
+        .expect("config-only install should succeed anywhere");
+
+        let config: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
+        assert_eq!(config["mcpServers"]["repograph"]["command"], "rkg-mcp");
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_source_that_is_not_a_repograph_checkout() {
+        let project = temp_dir();
+        let error = install_mcp(McpInstallArgs {
+            provider: McpProvider::ClaudeCode,
+            project_dir: project.clone(),
+            source: Some(project.clone()), // no crates/rkg-mcp/Cargo.toml here
+            no_install: true,
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("not a repograph checkout"), "{error}");
+        fs::remove_dir_all(project).unwrap();
     }
 
     #[test]

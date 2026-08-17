@@ -235,21 +235,31 @@ The graph path can also come from the `RKG_GRAPH` environment variable.
 
 ### Install for a client
 
-From the repository root, install the server onto your `PATH` and add a
-project-scoped configuration in one step:
+`rkg mcp install <client>` writes a project-scoped MCP configuration into the
+**current directory** — run it from whatever project you want to give the
+`repograph` server, not necessarily the repograph checkout:
 
 ```sh
-cargo run --release -p rkg-cli -- mcp install opencode
-cargo run --release -p rkg-cli -- mcp install claude-code
-cargo run --release -p rkg-cli -- mcp install codex
-cargo run --release -p rkg-cli -- mcp install junie
+rkg mcp install opencode
+rkg mcp install claude-code
+rkg mcp install codex
+rkg mcp install junie
 ```
 
-Each command installs `rkg-mcp` with Cargo and creates one configuration file:
-`opencode.json`, `.mcp.json`, `.codex/config.toml`, or `.junie/mcp/mcp.json`.
-The configuration uses the shared `.rkg/graph.json` artifact. The installer never
-overwrites an existing `repograph` server entry; use `--no-install` to add only the
-configuration when `rkg-mcp` is already on your `PATH`.
+Each command creates one configuration file — `opencode.json`, `.mcp.json`,
+`.codex/config.toml`, or `.junie/mcp/mcp.json` — that runs `rkg-mcp` against the
+shared `.rkg/graph.json` artifact. The installer never overwrites an existing
+`repograph` server entry.
+
+Building the `rkg-mcp` binary and writing the config are separate concerns:
+
+- Run from a **repograph checkout** and it also builds/installs `rkg-mcp` onto your
+  `PATH` (`cargo install --locked --path crates/rkg-mcp`) in the same step.
+- Run from **any other project** and it only writes the config, expecting `rkg-mcp`
+  to already be on your `PATH`; it warns if it isn't. Point it at a checkout to
+  build from there too: `rkg mcp install claude-code --source ~/path/to/repograph`.
+- `--no-install` writes only the configuration and never builds.
+- `--project-dir <dir>` targets a directory other than the current one.
 
 Codex itself must be installed separately (on Linux/macOS:
 `curl -fsSL https://chatgpt.com/codex/install.sh | sh`). Restart OpenCode after
