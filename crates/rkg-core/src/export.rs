@@ -76,9 +76,17 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
             .unwrap_or_default();
         // Free-text cells could contain tabs/newlines that break the columns, so
         // flatten any whitespace to single spaces.
-        let signature = n.signature.as_deref().map(sanitize_cell).unwrap_or_default();
+        let signature = n
+            .signature
+            .as_deref()
+            .map(sanitize_cell)
+            .unwrap_or_default();
         let symbol_kind = n.symbol_kind.as_deref().unwrap_or("");
-        let container = n.container.as_deref().map(sanitize_cell).unwrap_or_default();
+        let container = n
+            .container
+            .as_deref()
+            .map(sanitize_cell)
+            .unwrap_or_default();
         let doc = n.summary.as_deref().map(sanitize_cell).unwrap_or_default();
         // Locals can be multi-line destructuring patterns, so sanitize each one
         // (and the id/name/path cells) before joining into the tab-separated row.
@@ -99,10 +107,20 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
         let returns = n
             .returns
             .as_ref()
-            .map(|t| if t.inferred { format!("~{}", t.ty) } else { t.ty.clone() })
+            .map(|t| {
+                if t.inferred {
+                    format!("~{}", t.ty)
+                } else {
+                    t.ty.clone()
+                }
+            })
             .map(|s| sanitize_cell(&s))
             .unwrap_or_default();
-        let description = n.description.as_deref().map(sanitize_cell).unwrap_or_default();
+        let description = n
+            .description
+            .as_deref()
+            .map(sanitize_cell)
+            .unwrap_or_default();
         let id = sanitize_cell(&n.id);
         let name = sanitize_cell(&n.name);
         let path = sanitize_cell(&n.path);
@@ -120,7 +138,13 @@ pub fn write_nodes_tsv(graph: &Graph, path: impl AsRef<Path>) -> Result<()> {
 /// safe to place in a TSV cell.
 fn sanitize_cell(s: &str) -> String {
     s.chars()
-        .map(|c| if c == '\t' || c == '\n' || c == '\r' { ' ' } else { c })
+        .map(|c| {
+            if c == '\t' || c == '\n' || c == '\r' {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -159,7 +183,11 @@ mod tests {
         g.add_node(Node::new(NodeKind::File, "src/a.rs", "a"));
         g.add_node(Node::new(NodeKind::File, "src/b.rs", "b"));
         g.add_node(Node::new(NodeKind::Doc, "README.md", "README"));
-        g.add_edge(Edge::new("file:src/a.rs", "file:src/b.rs", EdgeKind::Imports));
+        g.add_edge(Edge::new(
+            "file:src/a.rs",
+            "file:src/b.rs",
+            EdgeKind::Imports,
+        ));
         g.add_edge(Edge::new("doc:README.md", "file:src/a.rs", EdgeKind::Links));
         g
     }
@@ -198,10 +226,7 @@ mod tests {
 
         for line in text.lines().filter(|l| !l.starts_with('#')) {
             let cols = line.split('\t').count();
-            assert!(
-                cols >= 5,
-                "row has too few columns ({cols}): {line:?}"
-            );
+            assert!(cols >= 5, "row has too few columns ({cols}): {line:?}");
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -229,11 +254,18 @@ mod tests {
 
         // Read back through the viewer's own sidecar parser.
         let gd = gv_graph::loader::from_exported_text("# from to\n", &text).unwrap();
-        let meta = gd.meta.iter().find(|m| m.name == "build").expect("build meta");
+        let meta = gd
+            .meta
+            .iter()
+            .find(|m| m.name == "build")
+            .expect("build meta");
         assert_eq!(meta.calls, vec!["read".to_owned(), "parse".to_owned()]);
         assert_eq!(meta.role.as_deref(), Some("factory"));
         assert_eq!(meta.returns.as_deref(), Some("Csr"));
-        assert!(meta.returns_inferred, "the ~ marker should decode to inferred=true");
+        assert!(
+            meta.returns_inferred,
+            "the ~ marker should decode to inferred=true"
+        );
         assert!(meta.description.as_deref().unwrap().contains("factory"));
         std::fs::remove_dir_all(&dir).ok();
     }

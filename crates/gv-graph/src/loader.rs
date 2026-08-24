@@ -31,7 +31,10 @@ pub fn parse(reader: impl Read) -> Result<(Vec<Edge>, Vec<String>)> {
 
         let mut fields = line.split_whitespace();
         let (Some(from), Some(to)) = (fields.next(), fields.next()) else {
-            anyhow::bail!("line {}: expected two fields, got {line:?}", line_number + 1);
+            anyhow::bail!(
+                "line {}: expected two fields, got {line:?}",
+                line_number + 1
+            );
         };
 
         labels.push(from.to_owned());
@@ -65,8 +68,8 @@ pub fn load(path: impl AsRef<Path>) -> Result<GraphData> {
     let path = path.as_ref();
     let file = std::fs::File::open(path)
         .with_context(|| format!("opening edge list {}", path.display()))?;
-    let (edges, labels) = parse(file)
-        .with_context(|| format!("parsing edge list {}", path.display()))?;
+    let (edges, labels) =
+        parse(file).with_context(|| format!("parsing edge list {}", path.display()))?;
 
     let adjacency = Csr::build(labels.len(), &edges);
     Ok(GraphData {
@@ -213,7 +216,10 @@ fn parse_indexed_edges(text: &str, node_count: usize) -> Result<Vec<Edge>> {
         let from: u32 = from.parse().with_context(|| format!("line {}", n + 1))?;
         let to: u32 = to.parse().with_context(|| format!("line {}", n + 1))?;
         if from as usize >= node_count || to as usize >= node_count {
-            anyhow::bail!("line {}: edge {from}->{to} exceeds node count {node_count}", n + 1);
+            anyhow::bail!(
+                "line {}: edge {from}->{to} exceeds node count {node_count}",
+                n + 1
+            );
         }
         edges.push(Edge { from, to });
     }
@@ -248,7 +254,10 @@ mod tests {
     fn tolerates_tabs_and_trailing_columns() {
         // Some SNAP files carry a weight or timestamp in a third column.
         let (edges, _) = parse("0\t1\t-1\n1\t2\t1\n".as_bytes()).unwrap();
-        assert_eq!(edges, vec![Edge { from: 0, to: 1 }, Edge { from: 1, to: 2 }]);
+        assert_eq!(
+            edges,
+            vec![Edge { from: 0, to: 1 }, Edge { from: 1, to: 2 }]
+        );
     }
 
     #[test]
@@ -285,7 +294,10 @@ mod tests {
     #[test]
     fn indexed_edges_use_integers_verbatim() {
         let edges = parse_indexed_edges("# c\n0 10\n2 1\n", 11).unwrap();
-        assert_eq!(edges, vec![Edge { from: 0, to: 10 }, Edge { from: 2, to: 1 }]);
+        assert_eq!(
+            edges,
+            vec![Edge { from: 0, to: 10 }, Edge { from: 2, to: 1 }]
+        );
     }
 
     #[test]

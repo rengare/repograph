@@ -179,7 +179,10 @@ mod tests {
     #[test]
     fn a_bare_positional_is_the_edge_list() {
         let cli = parse(&["data/facebook_combined.txt"]);
-        assert_eq!(cli.edge_input, Some(PathBuf::from("data/facebook_combined.txt")));
+        assert_eq!(
+            cli.edge_input,
+            Some(PathBuf::from("data/facebook_combined.txt"))
+        );
     }
 
     /// A path containing `=` must not be mistaken for an inline value; only
@@ -252,7 +255,9 @@ mod tests {
     fn every_documented_long_option_is_accepted() {
         for line in USAGE.lines() {
             for word in line.split_whitespace() {
-                let Some(flag) = word.strip_suffix(',').or(Some(word)) else { continue };
+                let Some(flag) = word.strip_suffix(',').or(Some(word)) else {
+                    continue;
+                };
                 if !flag.starts_with("--") {
                     continue;
                 }

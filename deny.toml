@@ -1,0 +1,59 @@
+# cargo-deny configuration. Run `cargo deny check` locally; CI runs each check
+# as a separate job in `.github/workflows/security.yml`.
+
+[graph]
+# The workspace has target-conditional dependency sets (native vs wasm32, plus
+# the clipboard/windowing extras gv-app enables only off-wasm). Auditing the
+# union means a vulnerability that only reaches the wasm build still gets
+# caught.
+all-features = true
+
+[advisories]
+version = 2
+# A yanked crate is usually yanked for a reason; treat it like an advisory.
+yanked = "deny"
+# Security vulnerabilities block at any depth. "Unmaintained" is scoped to
+# crates this workspace depends on directly, because a transitively
+# unmaintained crate is not something this repo can act on: RUSTSEC-2026-0192
+# (ttf-parser) arrives via winit -> sctk-adwaita -> ab_glyph -> owned_ttf_parser
+# and has no upgrade path from here. Flip back to "all" once the winit stack
+# moves off it.
+unmaintained = "workspace"
+# Add entries as `{ id = "RUSTSEC-0000-0000", reason = "why this is tolerable" }`.
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# Derived from the actual 415-crate graph, not a generic template. Each entry
+# below is load-bearing: removing it fails `cargo deny check licenses`.
+allow = [
+    "MIT",              # the bulk of the tree
+    "Apache-2.0",       # winit, ab_glyph, spirv, codespan-reporting, ...
+    "Unicode-3.0",      # the ICU / zerovec / yoke stack, and unicode-ident
+    "Zlib",             # foldhash, slotmap
+    "ISC",              # libloading
+    "BSD-2-Clause",     # arrayref
+    "BSD-3-Clause",     # tiny-skia, tiny-skia-path
+    "BSL-1.0",          # clipboard-win, error-code
+    "CC0-1.0",          # hexf-parse
+    # epaint_default_fonts is `(MIT OR Apache-2.0) AND OFL-1.1 AND
+    # Ubuntu-font-1.0` — the font licenses are ANDed, so both are required.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+
+[bans]
+# The wgpu/egui/winit graph carries genuine duplicate transitive versions that
+# nothing in this repo can resolve. Warn so the drift stays visible; revisit
+# once the graph is clean.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+# Verified: Cargo.lock contains zero `source = "git+..."` entries, so every
+# dependency already resolves through crates.io. Keep it that way.
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

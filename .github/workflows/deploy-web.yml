@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -17,8 +15,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Deliberately no `pages: write` / `id-token: write` here: this job compiles
+    # the full dependency tree and downloads a wasm-pack binary at runtime, so
+    # it must not carry a token that can publish to Pages.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - id: pages
         uses: actions/configure-pages@v6
         with:
@@ -29,7 +34,9 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
-      - run: wasm-pack build crates/gv-web --target web --release --out-dir ../../web/pkg
+      # Everything after `--` goes to cargo; `--locked` keeps the wasm build on
+      # the committed Cargo.lock, matching the native builds.
+      - run: wasm-pack build crates/gv-web --target web --release --out-dir ../../web/pkg -- --locked
       - uses: actions/upload-pages-artifact@v5
         with:
           path: web
@@ -37,6 +44,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -312,7 +312,12 @@ mod tests {
     fn uniforms_carry_the_derived_constants_not_the_raw_knobs() {
         // k, speed_scale and max_displace are computed once on the host rather
         // than recomputed by every invocation, as the original's GLSL did.
-        let params = LayoutParams { area: 1000.0, speed: 100.0, gravity: 2.0, three_d: true };
+        let params = LayoutParams {
+            area: 1000.0,
+            speed: 100.0,
+            gravity: 2.0,
+            three_d: true,
+        };
         let uniforms = FrUniforms::new(&params, 999, 4);
 
         assert_eq!(uniforms.k, params.k(999));
@@ -326,7 +331,10 @@ mod tests {
 
     #[test]
     fn two_d_mode_is_encoded_as_zero() {
-        let params = LayoutParams { three_d: false, ..Default::default() };
+        let params = LayoutParams {
+            three_d: false,
+            ..Default::default()
+        };
         assert_eq!(FrUniforms::new(&params, 8, 4).three_d, 0);
     }
 
@@ -401,10 +409,16 @@ mod tests {
         // A spanning tree so nothing is isolated, then extra edges so some rows
         // are much longer than others.
         let mut edges: Vec<gv_graph::Edge> = (1..node_count)
-            .map(|i| gv_graph::Edge { from: i, to: next(i) })
+            .map(|i| gv_graph::Edge {
+                from: i,
+                to: next(i),
+            })
             .collect();
         for _ in 0..node_count {
-            edges.push(gv_graph::Edge { from: next(node_count), to: next(node_count) });
+            edges.push(gv_graph::Edge {
+                from: next(node_count),
+                to: next(node_count),
+            });
         }
 
         gv_graph::testing::from_edges(node_count as usize, edges, 0)
@@ -499,7 +513,10 @@ mod tests {
     fn gpu_and_cpu_agree_in_three_d_and_on_a_denser_graph() {
         // 2D zeroes z on every step, which would hide a broken z lane. The
         // triangle also exercises a node whose CSR row has more than one entry.
-        let params = LayoutParams { three_d: true, ..Default::default() };
+        let params = LayoutParams {
+            three_d: true,
+            ..Default::default()
+        };
         let graph = gv_graph::testing::triangle();
 
         let actual = run_on_gpu(&graph, &params, 1);
@@ -521,7 +538,12 @@ mod tests {
         //
         // `area` puts k (= 5) well inside the 100..400 spacing, since attraction
         // only outweighs repulsion beyond d = k.
-        let params = LayoutParams { speed: 100.0, area: 0.06, gravity: 0.0, three_d: false };
+        let params = LayoutParams {
+            speed: 100.0,
+            area: 0.06,
+            gravity: 0.0,
+            three_d: false,
+        };
         let mut star = gv_graph::testing::from_edges(
             5,
             (1..5).map(|i| gv_graph::Edge { from: 0, to: i }).collect(),

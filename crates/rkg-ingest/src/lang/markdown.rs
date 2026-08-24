@@ -139,7 +139,10 @@ mod tests {
 
     #[test]
     fn links_to_repo_files_resolve() {
-        let r = resolver(&[("src/loader.rs", NodeKind::File), ("docs/x.md", NodeKind::Doc)]);
+        let r = resolver(&[
+            ("src/loader.rs", NodeKind::File),
+            ("docs/x.md", NodeKind::Doc),
+        ]);
         let (_, edges) = extract(
             "see [loader](src/loader.rs) and [x](docs/x.md#anchor)\n",
             "README.md",

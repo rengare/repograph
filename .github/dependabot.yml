@@ -1,0 +1,62 @@
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Do not propose a version published minutes ago. That is the window in
+    # which a compromised release is still undetected; waiting gives the
+    # registry and RustSec time to catch it. Advisory-driven security updates
+    # bypass this and still land immediately.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    groups:
+      # These move as a unit or not at all. Cargo.toml documents that `wgpu` is
+      # pinned to exactly what egui-wgpu depends on — two wgpu versions in the
+      # graph means two incompatible sets of types. A lone "bump wgpu" PR cannot
+      # compile, so never let Dependabot open one.
+      graphics:
+        patterns:
+          - egui
+          - egui-*
+          - wgpu
+          - winit
+          - glam
+          - bytemuck
+          - naga
+      # The grammar crates track tree-sitter's ABI; they land together.
+      tree-sitter:
+        patterns:
+          - tree-sitter
+          - tree-sitter-*
+      rest:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - egui
+          - egui-*
+          - wgpu
+          - winit
+          - glam
+          - bytemuck
+          - naga
+          - tree-sitter
+          - tree-sitter-*
+
+  # Keeps the tag-pinned actions current, which is what makes tag pinning
+  # (rather than SHA pinning) a defensible choice — see zizmor.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"

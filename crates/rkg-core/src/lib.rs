@@ -131,11 +131,17 @@ pub struct TypeRef {
 
 impl TypeRef {
     pub fn declared(ty: impl Into<String>) -> Self {
-        TypeRef { ty: ty.into(), inferred: false }
+        TypeRef {
+            ty: ty.into(),
+            inferred: false,
+        }
     }
 
     pub fn inferred(ty: impl Into<String>) -> Self {
-        TypeRef { ty: ty.into(), inferred: true }
+        TypeRef {
+            ty: ty.into(),
+            inferred: true,
+        }
     }
 }
 
@@ -291,8 +297,7 @@ impl Graph {
     /// Adds an edge only if both endpoints exist and the same (from,to,kind) triple
     /// is not already present. Returns false if it was a dangling or duplicate edge.
     pub fn add_edge(&mut self, edge: Edge) -> bool {
-        let (Some(&from), Some(&to)) =
-            (self.index.get(&edge.from), self.index.get(&edge.to))
+        let (Some(&from), Some(&to)) = (self.index.get(&edge.from), self.index.get(&edge.to))
         else {
             return false;
         };
@@ -359,8 +364,7 @@ impl Graph {
         self.out_adj = vec![Vec::new(); self.nodes.len()];
         self.in_adj = vec![Vec::new(); self.nodes.len()];
         for (ei, edge) in self.edges.iter().enumerate() {
-            if let (Some(&from), Some(&to)) =
-                (self.index.get(&edge.from), self.index.get(&edge.to))
+            if let (Some(&from), Some(&to)) = (self.index.get(&edge.from), self.index.get(&edge.to))
             {
                 self.out_adj[from].push(ei);
                 self.in_adj[to].push(ei);
@@ -385,8 +389,8 @@ impl Graph {
     /// Loads a graph from JSON and rebuilds its adjacency.
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let json = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let json =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         let mut graph: Graph =
             serde_json::from_str(&json).with_context(|| format!("parsing {}", path.display()))?;
         graph.reindex();
@@ -402,7 +406,11 @@ mod tests {
         let mut g = Graph::new();
         g.add_node(Node::new(NodeKind::File, "src/a.rs", "a"));
         g.add_node(Node::new(NodeKind::File, "src/b.rs", "b"));
-        g.add_edge(Edge::new("file:src/a.rs", "file:src/b.rs", EdgeKind::Imports));
+        g.add_edge(Edge::new(
+            "file:src/a.rs",
+            "file:src/b.rs",
+            EdgeKind::Imports,
+        ));
         g
     }
 

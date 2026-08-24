@@ -279,8 +279,7 @@ impl Octree {
                 position[1] - cell.center[1],
                 position[2] - cell.center[2],
             ];
-            let distance_squared =
-                delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2];
+            let distance_squared = delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2];
 
             // A cell with nothing after it but its own successor has no
             // children, so it cannot be opened and must be taken whole.
@@ -339,7 +338,11 @@ fn bounding_cube(positions: &[[f32; 3]]) -> ([f32; 3], f32) {
     let extent = (0..3)
         .map(|axis| max[axis] - min[axis])
         .fold(0.0f32, f32::max);
-    let half = if extent > 0.0 { extent * 0.5 * 1.001 } else { 1.0 };
+    let half = if extent > 0.0 {
+        extent * 0.5 * 1.001
+    } else {
+        1.0
+    };
 
     (center, half)
 }
@@ -358,7 +361,13 @@ fn octant_of(position: [f32; 3], center: [f32; 3]) -> usize {
 /// Centre of the given octant of a parent, where `half` is the *child's*
 /// half-width.
 fn child_center(center: [f32; 3], half: f32, octant: usize) -> [f32; 3] {
-    let offset = |bit: usize| if octant & (1 << bit) != 0 { half } else { -half };
+    let offset = |bit: usize| {
+        if octant & (1 << bit) != 0 {
+            half
+        } else {
+            -half
+        }
+    };
     [
         center[0] + offset(0),
         center[1] + offset(1),
@@ -383,8 +392,7 @@ mod tests {
                 position[1] - target[1],
                 position[2] - target[2],
             ];
-            let distance =
-                (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
+            let distance = (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt();
             if distance > 0.0 {
                 let magnitude = (k * k) / distance;
                 for (component, delta) in displacement.iter_mut().zip(&delta) {
@@ -489,7 +497,10 @@ mod tests {
                 "cell {index} escapes backwards to {}",
                 cell.escape
             );
-            assert!(cell.escape as usize <= tree.cells.len(), "cell {index} escapes past the end");
+            assert!(
+                cell.escape as usize <= tree.cells.len(),
+                "cell {index} escapes past the end"
+            );
         }
     }
 
@@ -544,7 +555,8 @@ mod tests {
             let approximate = tree.repulsion(body as u32, positions[body], k, 0.5);
             let exact = brute_force(&positions, body, k);
 
-            let magnitude = (exact[0] * exact[0] + exact[1] * exact[1] + exact[2] * exact[2]).sqrt();
+            let magnitude =
+                (exact[0] * exact[0] + exact[1] * exact[1] + exact[2] * exact[2]).sqrt();
             let error = ((approximate[0] - exact[0]).powi(2)
                 + (approximate[1] - exact[1]).powi(2)
                 + (approximate[2] - exact[2]).powi(2))
@@ -616,10 +628,16 @@ mod tests {
         let tree = Octree::build(&positions);
 
         let displacement = tree.repulsion(8, [100.0, 0.0, 0.0], 10.0, 0.5);
-        assert!(displacement[0] > 0.0, "pushed the wrong way: {displacement:?}");
+        assert!(
+            displacement[0] > 0.0,
+            "pushed the wrong way: {displacement:?}"
+        );
         // Eight bodies at one point, so eight times the single-body force.
         let single = 100.0f32 / 100.0 * (10.0 * 10.0 / 100.0);
-        assert!((displacement[0] - 8.0 * single).abs() < 1e-3, "{displacement:?}");
+        assert!(
+            (displacement[0] - 8.0 * single).abs() < 1e-3,
+            "{displacement:?}"
+        );
     }
 
     #[test]

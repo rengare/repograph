@@ -177,7 +177,11 @@ impl RadixSort {
         keys: &wgpu::Buffer,
         values: &wgpu::Buffer,
     ) {
-        debug_assert_eq!(PASSES % 2, 0, "an odd pass count would end in the scratch buffers");
+        debug_assert_eq!(
+            PASSES % 2,
+            0,
+            "an odd pass count would end in the scratch buffers"
+        );
 
         let stride = uniform_stride(context);
 
@@ -204,11 +208,26 @@ impl RadixSort {
                                 size: wgpu::BufferSize::new(size_of::<Uniforms>() as u64),
                             }),
                         },
-                        wgpu::BindGroupEntry { binding: 1, resource: source_keys.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 2, resource: source_values.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 3, resource: target_keys.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 4, resource: target_values.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 5, resource: self.histograms.as_entire_binding() },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: source_keys.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: source_values.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: target_keys.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: target_values.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: self.histograms.as_entire_binding(),
+                        },
                     ],
                 });
 
@@ -296,9 +315,11 @@ mod tests {
         context.queue.submit([encoder.finish()]);
 
         let (sender, receiver) = std::sync::mpsc::channel();
-        staging.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
+        staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = sender.send(result);
+            });
         context
             .device
             .poll(wgpu::PollType::wait_indefinitely())

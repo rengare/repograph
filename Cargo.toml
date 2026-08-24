@@ -8,6 +8,10 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+# Nothing here goes to crates.io: the crates use unversioned path
+# dependencies on each other and are distributed as binaries. Saying so
+# explicitly also lets cargo-deny's wildcard check pass on those paths.
+publish = false
 
 [workspace.dependencies]
 # Visualization crates, forked from graphvisualizer-rs. Dependency direction is

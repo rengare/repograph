@@ -179,15 +179,17 @@ impl GraphBuffers {
         context.queue.submit([encoder.finish()]);
 
         let mapped = staging.clone();
-        staging.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            if result.is_ok() {
-                let view = mapped.slice(..).get_mapped_range();
-                let nodes = bytemuck::cast_slice::<u8, Node>(&view).to_vec();
-                drop(view);
-                mapped.unmap();
-                done(nodes);
-            }
-        });
+        staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                if result.is_ok() {
+                    let view = mapped.slice(..).get_mapped_range();
+                    let nodes = bytemuck::cast_slice::<u8, Node>(&view).to_vec();
+                    drop(view);
+                    mapped.unmap();
+                    done(nodes);
+                }
+            });
     }
 
     /// Bytes the buffers will occupy for a graph of this shape.

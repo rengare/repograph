@@ -200,7 +200,9 @@ fn parse_direction(s: &str) -> Result<Direction, String> {
         "out" => Ok(Direction::Out),
         "in" => Ok(Direction::In),
         "both" => Ok(Direction::Both),
-        other => Err(format!("unknown direction {other:?} (expected out|in|both)")),
+        other => Err(format!(
+            "unknown direction {other:?} (expected out|in|both)"
+        )),
     }
 }
 
@@ -305,7 +307,11 @@ mod tests {
         g.add_node(Node::new(NodeKind::File, "src/a.rs", "a"));
         g.add_node(Node::new(NodeKind::File, "src/b.rs", "b"));
         g.add_node(Node::new(NodeKind::Doc, "README.md", "README"));
-        g.add_edge(Edge::new("file:src/a.rs", "file:src/b.rs", EdgeKind::Imports));
+        g.add_edge(Edge::new(
+            "file:src/a.rs",
+            "file:src/b.rs",
+            EdgeKind::Imports,
+        ));
         g.add_edge(Edge::new("doc:README.md", "file:src/a.rs", EdgeKind::Links));
         Server::new(g, PathBuf::from(".rkg/graph.json"))
     }
@@ -359,7 +365,14 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        for expected in ["build", "find_node", "neighbors", "context_pack", "subgraph", "path_between"] {
+        for expected in [
+            "build",
+            "find_node",
+            "neighbors",
+            "context_pack",
+            "subgraph",
+            "path_between",
+        ] {
             assert!(names.contains(&expected), "missing tool {expected}");
         }
     }
@@ -419,7 +432,11 @@ mod tests {
     #[test]
     fn context_pack_starts_at_the_seed() {
         let s = server();
-        let out = payload(&call(&s, "context_pack", json!({ "seed": "file:src/a.rs" })));
+        let out = payload(&call(
+            &s,
+            "context_pack",
+            json!({ "seed": "file:src/a.rs" }),
+        ));
         assert_eq!(out["seed"], "file:src/a.rs");
         assert_eq!(out["entries"][0]["id"], "file:src/a.rs");
     }

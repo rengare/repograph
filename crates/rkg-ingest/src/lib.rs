@@ -148,7 +148,11 @@ fn add_file_symbols(
             base
         };
 
-        let mut node = Node::new(NodeKind::Symbol, format!("{rel}::{}", sym.name), sym.name.clone());
+        let mut node = Node::new(
+            NodeKind::Symbol,
+            format!("{rel}::{}", sym.name),
+            sym.name.clone(),
+        );
         node.id = id.clone();
         node.lang = lang.map(str::to_string);
         node.symbol_kind = Some(sym.kind.clone());
@@ -175,7 +179,9 @@ fn add_file_symbols(
         graph.add_node(node);
         graph.add_edge(Edge::new(file_id.clone(), id.clone(), EdgeKind::Defines));
 
-        name_to_id.entry(sym.name.clone()).or_insert_with(|| id.clone());
+        name_to_id
+            .entry(sym.name.clone())
+            .or_insert_with(|| id.clone());
         created.push((sym, id));
     }
 
@@ -240,12 +246,21 @@ fn file_rollup(syms: &[&SymbolDef], import_names: &[String]) -> Option<String> {
     if !tops.is_empty() {
         let shown = tops.iter().take(8).copied().collect::<Vec<_>>().join(", ");
         let more = tops.len().saturating_sub(8);
-        let suffix = if more > 0 { format!(", +{more}") } else { String::new() };
+        let suffix = if more > 0 {
+            format!(", +{more}")
+        } else {
+            String::new()
+        };
         parts.push(format!("defines {shown}{suffix}"));
     }
 
     if !import_names.is_empty() {
-        let shown = import_names.iter().take(6).map(String::as_str).collect::<Vec<_>>().join(", ");
+        let shown = import_names
+            .iter()
+            .take(6)
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
         parts.push(format!("imports {shown}"));
     }
 
@@ -359,9 +374,15 @@ mod tests {
     #[test]
     fn polyglot_symbols_and_imports() {
         let root = scratch_repo(&[
-            ("app.py", "from util import helper\n\ndef main():\n    return helper()\n"),
+            (
+                "app.py",
+                "from util import helper\n\ndef main():\n    return helper()\n",
+            ),
             ("util/helper.py", "def helper():\n    return 2\n"),
-            ("src/main.c", "#include \"util.h\"\nint add(int a) { return a; }\n"),
+            (
+                "src/main.c",
+                "#include \"util.h\"\nint add(int a) { return a; }\n",
+            ),
             ("src/util.h", "int sub(int a);\n"),
             ("A.java", "import lib.Thing;\nclass A { void run() {} }\n"),
             ("lib/Thing.java", "class Thing {}\n"),
@@ -392,7 +413,10 @@ mod tests {
     #[test]
     fn markdown_sections_and_links() {
         let root = scratch_repo(&[
-            ("README.md", "# Intro\nsee [loader](src/loader.rs)\n## Format\n"),
+            (
+                "README.md",
+                "# Intro\nsee [loader](src/loader.rs)\n## Format\n",
+            ),
             ("src/loader.rs", "// x\n"),
         ]);
         let g = build_graph(&root).unwrap();

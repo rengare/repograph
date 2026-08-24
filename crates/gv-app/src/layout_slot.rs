@@ -210,7 +210,10 @@ mod tests {
         step_once(&mut slot, &context, &buffers, &mut graph, &params);
 
         let on_gpu = pollster::block_on(buffers.read_nodes(&context)).expect("readback");
-        assert_eq!(on_gpu, graph.nodes, "the GPU buffer is a step behind the host");
+        assert_eq!(
+            on_gpu, graph.nodes,
+            "the GPU buffer is a step behind the host"
+        );
     }
 
     #[test]
@@ -223,7 +226,10 @@ mod tests {
 
         let mut slot = LayoutSlot::for_choice(LayoutChoice::FrGpu, Some((&context, &buffers)))
             .expect("the GPU layout builds when a device is available");
-        assert!(slot.is_gpu(), "a device was available; this should be the GPU path");
+        assert!(
+            slot.is_gpu(),
+            "a device was available; this should be the GPU path"
+        );
 
         step_once(&mut slot, &context, &buffers, &mut graph, &params);
 
@@ -244,13 +250,14 @@ mod tests {
         let (context, buffers) = on_device(&graph);
         let before = graph.nodes.clone();
 
-        let mut slot = LayoutSlot::for_choice(
-            LayoutChoice::FrGpuBarnesHut,
-            Some((&context, &buffers)),
-        )
-        .expect("the GPU tree builds when a device is available");
+        let mut slot =
+            LayoutSlot::for_choice(LayoutChoice::FrGpuBarnesHut, Some((&context, &buffers)))
+                .expect("the GPU tree builds when a device is available");
 
-        assert!(slot.is_gpu(), "a device was available; this should be the GPU path");
+        assert!(
+            slot.is_gpu(),
+            "a device was available; this should be the GPU path"
+        );
         assert_eq!(slot.name(), "F-R gpu barnes-hut");
 
         step_once(&mut slot, &context, &buffers, &mut graph, &params);

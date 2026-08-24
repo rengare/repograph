@@ -337,8 +337,16 @@ mod tests {
             g.add_node(Node::new(NodeKind::File, format!("src/{name}.rs"), name));
         }
         g.add_node(Node::new(NodeKind::Doc, "README.md", "README"));
-        g.add_edge(Edge::new("file:src/a.rs", "file:src/b.rs", EdgeKind::Imports));
-        g.add_edge(Edge::new("file:src/b.rs", "file:src/c.rs", EdgeKind::Imports));
+        g.add_edge(Edge::new(
+            "file:src/a.rs",
+            "file:src/b.rs",
+            EdgeKind::Imports,
+        ));
+        g.add_edge(Edge::new(
+            "file:src/b.rs",
+            "file:src/c.rs",
+            EdgeKind::Imports,
+        ));
         g.add_edge(Edge::new("doc:README.md", "file:src/a.rs", EdgeKind::Links));
         g
     }

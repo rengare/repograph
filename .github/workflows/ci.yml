@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Until this existed, nothing at all ran on a pull request — not even a
+  # compile check. `--locked` also proves the committed Cargo.lock still
+  # resolves, which is what the release builds depend on.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Linux viewer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libegl1-mesa-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo test --locked --workspace
+
+  # deploy-web.yml only runs after a merge to main, so without this a wasm-only
+  # break would not surface until the Pages deploy had already failed.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --locked -p gv-web --target wasm32-unknown-unknown
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check

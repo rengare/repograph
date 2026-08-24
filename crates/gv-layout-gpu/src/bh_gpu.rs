@@ -140,11 +140,26 @@ impl Prepare {
             label: Some("bh prepare"),
             layout: &layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: buffers.nodes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: bounds.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: codes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 4, resource: order.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: buffers.nodes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: bounds.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: codes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: order.as_entire_binding(),
+                },
             ],
         });
 
@@ -205,8 +220,7 @@ impl Prepare {
             pass.dispatch_workgroups(count, 1, 1);
         }
 
-        self.sort
-            .record(context, encoder, &self.codes, &self.order);
+        self.sort.record(context, encoder, &self.codes, &self.order);
     }
 
     /// Rewrites the uniforms, for a 2D/3D switch between steps.
@@ -342,7 +356,10 @@ impl Tree {
 
         let keys = scratch("bh tree keys", u64::from(capacity) * 4);
         let values = scratch("bh tree values", u64::from(capacity) * 4);
-        let cells = scratch("bh tree cells", u64::from(capacity) * size_of::<GpuCell>() as u64);
+        let cells = scratch(
+            "bh tree cells",
+            u64::from(capacity) * size_of::<GpuCell>() as u64,
+        );
         let counter = scratch("bh tree counter", 4);
 
         let storage = |binding: u32, read_only: bool| wgpu::BindGroupLayoutEntry {
@@ -392,14 +409,38 @@ impl Tree {
                         size: wgpu::BufferSize::new(size_of::<TreeUniforms>() as u64),
                     }),
                 },
-                wgpu::BindGroupEntry { binding: 1, resource: buffers.nodes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: prepare.bounds.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: prepare.codes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 4, resource: prepare.order.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 5, resource: keys.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 6, resource: values.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 7, resource: cells.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 8, resource: counter.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: buffers.nodes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: prepare.bounds.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: prepare.codes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: prepare.order.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: keys.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: values.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: cells.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: counter.as_entire_binding(),
+                },
             ],
         });
 
@@ -475,7 +516,14 @@ impl Tree {
         // compute pass — the phase 3 bug, which was invisible until the graph
         // outgrew one workgroup.
         self.pass(encoder, "bh clear", &self.clear, over_cells, 1, 0);
-        self.pass(encoder, "bh enumerate", &self.enumerate, over_bodies, LEVELS + 1, 0);
+        self.pass(
+            encoder,
+            "bh enumerate",
+            &self.enumerate,
+            over_bodies,
+            LEVELS + 1,
+            0,
+        );
 
         // Depth-first order, by a key unique to each node. This is what makes
         // the atomic append in `enumerate` reproducible.
@@ -618,10 +666,22 @@ impl BhGpuLayout {
             label: Some("bh walk"),
             layout: &layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniforms.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: buffers.nodes.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: tree.cells.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: prepare.order.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: buffers.nodes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: tree.cells.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: prepare.order.as_entire_binding(),
+                },
             ],
         });
 
@@ -813,7 +873,11 @@ pub fn bounding_cube(bodies: &[[f32; 3]]) -> ([f32; 3], f32) {
     let extent = (0..3)
         .map(|axis| high[axis] - low[axis])
         .fold(0.0f32, f32::max);
-    let half = if extent > 0.0 { extent * 0.5 * 1.001 } else { 1.0 };
+    let half = if extent > 0.0 {
+        extent * 0.5 * 1.001
+    } else {
+        1.0
+    };
 
     (center, half)
 }
@@ -861,9 +925,11 @@ mod tests {
         context.queue.submit([encoder.finish()]);
 
         let (sender, receiver) = std::sync::mpsc::channel();
-        staging.slice(..).map_async(wgpu::MapMode::Read, move |result| {
-            let _ = sender.send(result);
-        });
+        staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                let _ = sender.send(result);
+            });
         context
             .device
             .poll(wgpu::PollType::wait_indefinitely())

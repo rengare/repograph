@@ -12,8 +12,9 @@ use anyhow::{Context, Result, bail};
 use gv_gpu::{GpuContext, GraphBuffers};
 use gv_graph::GraphData;
 use gv_gui::LayoutChoice;
-use gv_layout::{CpuLayout, LayoutParams, barnes_hut::BarnesHutLayout, fr_cpu::FrCpuLayout,
-                random::RandomLayout};
+use gv_layout::{
+    CpuLayout, LayoutParams, barnes_hut::BarnesHutLayout, fr_cpu::FrCpuLayout, random::RandomLayout,
+};
 use gv_layout_gpu::{BhGpuLayout, FrGpuLayout, GpuLayout};
 
 /// Axis-aligned bounds of a laid-out graph.
@@ -242,7 +243,13 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let adjacency = Csr::build(nodes.len(), &edges);
-        GraphData { nodes, edges, adjacency, labels: Vec::new(), meta: Vec::new() }
+        GraphData {
+            nodes,
+            edges,
+            adjacency,
+            labels: Vec::new(),
+            meta: Vec::new(),
+        }
     }
 
     #[test]
@@ -294,7 +301,12 @@ mod tests {
     #[test]
     #[ignore = "requires a GPU adapter"]
     fn a_headless_gpu_run_reports_the_same_shape_as_a_cpu_run() {
-        let params = LayoutParams { speed: 100.0, area: 12.0, gravity: 0.0, three_d: false };
+        let params = LayoutParams {
+            speed: 100.0,
+            area: 12.0,
+            gravity: 0.0,
+            three_d: false,
+        };
         let mut graph = graph_at(
             &[[-10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
             vec![Edge { from: 0, to: 1 }],
@@ -312,7 +324,10 @@ mod tests {
 
     #[test]
     fn cpu_choices_resolve_to_their_layouts() {
-        assert_eq!(cpu_layout_for(LayoutChoice::FrCpu).unwrap().name(), "F-R cpu");
+        assert_eq!(
+            cpu_layout_for(LayoutChoice::FrCpu).unwrap().name(),
+            "F-R cpu"
+        );
         assert_eq!(
             cpu_layout_for(LayoutChoice::FrBarnesHut).unwrap().name(),
             "F-R cpu barnes-hut"
@@ -335,7 +350,12 @@ mod tests {
             &[[-10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
             vec![Edge { from: 0, to: 1 }],
         );
-        let params = LayoutParams { speed: 100.0, area: 12.0, gravity: 0.0, three_d: false };
+        let params = LayoutParams {
+            speed: 100.0,
+            area: 12.0,
+            gravity: 0.0,
+            three_d: false,
+        };
         let report = run(&mut graph, &params, LayoutChoice::FrCpu, 500).unwrap();
 
         assert_eq!(report.layout, "F-R cpu");
@@ -354,7 +374,15 @@ mod tests {
         let report = run(&mut graph, &LayoutParams::default(), LayoutChoice::FrCpu, 1).unwrap();
         let text = report.to_string();
 
-        for field in ["layout", "nodes", "edges", "steps", "elapsed", "mean edge", "extent"] {
+        for field in [
+            "layout",
+            "nodes",
+            "edges",
+            "steps",
+            "elapsed",
+            "mean edge",
+            "extent",
+        ] {
             assert!(text.contains(field), "{field:?} missing from:\n{text}");
         }
     }

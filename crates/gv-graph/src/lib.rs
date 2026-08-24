@@ -136,7 +136,7 @@ impl NodeCategory {
     /// carries kinds instead of anonymous ids.
     pub fn color(self) -> [f32; 4] {
         match self {
-            NodeCategory::Dir => [0.55, 0.55, 0.60, 1.0], // grey
+            NodeCategory::Dir => [0.55, 0.55, 0.60, 1.0],  // grey
             NodeCategory::File => [0.30, 0.65, 1.00, 1.0], // blue
             NodeCategory::Doc => [0.35, 0.80, 0.45, 1.0],  // green
             NodeCategory::Section => [0.55, 0.85, 0.55, 1.0], // pale green

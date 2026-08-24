@@ -100,7 +100,10 @@ mod tests {
         let mut seen = vec![[false; 2]; edge_count as usize];
         for vertex in 0..EdgePipeline::vertex_count(edge_count) {
             let (edge, endpoint) = EdgePipeline::resolve_vertex(vertex);
-            assert!(!seen[edge as usize][endpoint as usize], "vertex {vertex} repeated");
+            assert!(
+                !seen[edge as usize][endpoint as usize],
+                "vertex {vertex} repeated"
+            );
             seen[edge as usize][endpoint as usize] = true;
         }
         assert!(seen.iter().all(|pair| pair == &[true, true]));

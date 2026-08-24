@@ -2,3 +2,6 @@
 /.rkg/
 /web/pkg/
 /web/examples/
+
+# cargo-cyclonedx output; SBOMs are a CI/release artifact, not source.
+*.cdx.json
