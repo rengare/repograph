@@ -48,13 +48,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --locked -p gv-web --target wasm32-unknown-unknown
 
-  # Report-only for now: the tree does not currently pass rustfmt, and
-  # reformatting every crate does not belong in the same change as the security
-  # tooling. Run `cargo fmt --all` in a standalone commit, then delete the
-  # `continue-on-error` line below to make this a real gate.
   fmt:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
         with:
