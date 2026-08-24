@@ -157,7 +157,7 @@ jobs:
           # Full history: gitleaks scans every commit, not just the tip.
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,7 +176,7 @@ jobs:
       # The inventory section reads `cargo metadata`; no build is needed.
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
