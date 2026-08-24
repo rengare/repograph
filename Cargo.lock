@@ -167,7 +167,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -3076,9 +3076,9 @@ checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 
 [[package]]
 name = "tree-sitter"
-version = "0.25.10"
+version = "0.26.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+checksum = "17ebdd3a5a7e28a1890b876fdbd0c3c0fe0a6336cffaa104f11b9f720c9daa29"
 dependencies = [
  "cc",
  "regex",
@@ -3130,9 +3130,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-javascript"
-version = "0.23.1"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf40bf599e0416c16c125c3cec10ee5ddc7d1bb8b0c60fa5c4de249ad34dc1b1"
+checksum = "68204f2abc0627a90bdf06e605f5c470aa26fdcb2081ea553a04bdad756693f5"
 dependencies = [
  "cc",
  "tree-sitter-language",
