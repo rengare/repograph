@@ -178,6 +178,9 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job never checks out, and `gh` shells out to git to work out
+          # which repository it is acting on. GH_REPO tells it directly.
+          GH_REPO: ${{ github.repository }}
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
           set -euo pipefail
