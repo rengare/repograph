@@ -45,11 +45,7 @@ fn run(
 }
 
 /// The same graph through the exact GPU path, for comparison.
-fn run_brute_force(
-    graph: &GraphData,
-    params: &LayoutParams,
-    steps: usize,
-) -> Vec<gv_graph::Node> {
+fn run_brute_force(graph: &GraphData, params: &LayoutParams, steps: usize) -> Vec<gv_graph::Node> {
     let context = pollster::block_on(GpuContext::new(None)).expect("adapter available");
     let buffers = GraphBuffers::upload(&context, graph).expect("upload");
     let mut layout = FrGpuLayout::new(&context, &buffers).expect("pipelines build");
@@ -77,10 +73,16 @@ fn multi_workgroup_graph(node_count: u32) -> GraphData {
     };
 
     let mut edges: Vec<gv_graph::Edge> = (1..node_count)
-        .map(|i| gv_graph::Edge { from: i, to: next(i) })
+        .map(|i| gv_graph::Edge {
+            from: i,
+            to: next(i),
+        })
         .collect();
     for _ in 0..node_count {
-        edges.push(gv_graph::Edge { from: next(node_count), to: next(node_count) });
+        edges.push(gv_graph::Edge {
+            from: next(node_count),
+            to: next(node_count),
+        });
     }
 
     gv_graph::testing::from_edges(node_count as usize, edges, 0)
@@ -110,11 +112,7 @@ fn mean_edge_length(graph: &GraphData, nodes: &[gv_graph::Node]) -> f32 {
     (total / graph.edges.len() as f64) as f32
 }
 
-fn assert_positions_close(
-    actual: &[gv_graph::Node],
-    expected: &[gv_graph::Node],
-    tolerance: f32,
-) {
+fn assert_positions_close(actual: &[gv_graph::Node], expected: &[gv_graph::Node], tolerance: f32) {
     assert_eq!(actual.len(), expected.len(), "node count changed");
     for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
         for axis in 0..3 {
@@ -149,10 +147,20 @@ fn the_tree_is_a_walkable_depth_first_array() {
 
     for (index, cell) in cells.iter().enumerate() {
         let index = index as u32;
-        assert!(cell.escape > index, "cell {index} escapes backwards to {}", cell.escape);
+        assert!(
+            cell.escape > index,
+            "cell {index} escapes backwards to {}",
+            cell.escape
+        );
         assert!(cell.escape <= count, "cell {index} escapes past the end");
-        assert!(cell.first <= cell.last, "cell {index} covers an empty range");
-        assert!(cell.last < graph.node_count() as u32, "cell {index} covers a body that is not there");
+        assert!(
+            cell.first <= cell.last,
+            "cell {index} covers an empty range"
+        );
+        assert!(
+            cell.last < graph.node_count() as u32,
+            "cell {index} covers a body that is not there"
+        );
 
         // Descending is `index + 1`, so a cell with children must be followed
         // immediately by its subtree, and every one of them must fall inside
@@ -181,7 +189,10 @@ fn the_tree_is_a_walkable_depth_first_array() {
     // how the walk finds the end of the array without binding the counter.
     assert_eq!(cells[0].first, 0);
     assert_eq!(cells[0].last, graph.node_count() as u32 - 1);
-    assert_eq!(cells[0].escape, count, "the root does not escape past the last cell");
+    assert_eq!(
+        cells[0].escape, count,
+        "the root does not escape past the last cell"
+    );
 }
 
 #[test]
@@ -190,7 +201,10 @@ fn every_cell_is_the_centre_of_mass_of_its_own_range() {
     // The stage with no structural symptom: a wrong sum still walks, still
     // terminates, and just quietly puts the forces in the wrong direction. So
     // it is checked against a host recomputation over the same body ranges.
-    let params = LayoutParams { three_d: true, ..Default::default() };
+    let params = LayoutParams {
+        three_d: true,
+        ..Default::default()
+    };
     let graph = multi_workgroup_graph(1500);
     let (_context, layout, nodes) = run(&graph, &params, DEFAULT_THETA, 1);
 
@@ -203,7 +217,11 @@ fn every_cell_is_the_centre_of_mass_of_its_own_range() {
 
     for (index, cell) in cells.iter().enumerate() {
         let range = &order[cell.first as usize..=cell.last as usize];
-        assert_eq!(cell.mass, range.len() as f32, "cell {index} has the wrong mass");
+        assert_eq!(
+            cell.mass,
+            range.len() as f32,
+            "cell {index} has the wrong mass"
+        );
 
         let mut sum = [0.0f64; 3];
         for &body in range {
@@ -247,7 +265,10 @@ fn the_build_stays_inside_the_capacity_it_allocates() {
             "{} bodies produced {count} cells, past the 2n - 1 bound",
             graph.node_count()
         );
-        assert!(count < capacity, "{count} cells filled the {capacity}-slot capacity");
+        assert!(
+            count < capacity,
+            "{count} cells filled the {capacity}-slot capacity"
+        );
     }
 }
 
@@ -367,7 +388,10 @@ fn repeated_runs_are_byte_identical() {
 fn three_d_is_laid_out_in_three_dimensions() {
     // 2D zeroes z on every step, which would hide a z lane that the tree drops
     // — and the tree quantises z into the code whether or not the forces use it.
-    let params = LayoutParams { three_d: true, ..Default::default() };
+    let params = LayoutParams {
+        three_d: true,
+        ..Default::default()
+    };
     let graph = multi_workgroup_graph(512);
 
     let (_context, _layout, actual) = run(&graph, &params, 0.0, 1);
@@ -401,7 +425,9 @@ fn coincident_bodies_neither_hang_nor_produce_nan() {
         "coincident bodies should collapse to a single leaf"
     );
     assert!(
-        actual.iter().all(|node| node.position.iter().all(|axis| axis.is_finite())),
+        actual
+            .iter()
+            .all(|node| node.position.iter().all(|axis| axis.is_finite())),
         "coincident bodies produced a non-finite position"
     );
 }
@@ -413,14 +439,24 @@ fn a_distant_cluster_is_felt_as_its_aggregate() {
     // count: a tight clump far away must push a lone body as hard as its mass
     // says, whether the walk opened it or took it whole. If the aggregate were
     // ever built from the wrong mass, this is where it shows.
-    let params = LayoutParams { area: 0.1, gravity: 0.0, speed: 100.0, three_d: false };
+    let params = LayoutParams {
+        area: 0.1,
+        gravity: 0.0,
+        speed: 100.0,
+        three_d: false,
+    };
     let mut graph = gv_graph::testing::dust(513);
     for (index, node) in graph.nodes.iter_mut().enumerate() {
         node.position = if index == 0 {
             [0.0, 0.0, 0.0, 1.0]
         } else {
             // A clump 500 away, tight enough that theta accepts it whole.
-            [500.0 + (index % 4) as f32 * 0.01, (index % 7) as f32 * 0.01, 0.0, 1.0]
+            [
+                500.0 + (index % 4) as f32 * 0.01,
+                (index % 7) as f32 * 0.01,
+                0.0,
+                1.0,
+            ]
         };
     }
 
@@ -461,7 +497,10 @@ fn stress_100k() {
     // case: flattening z turns the octree into a quadtree, which is shallower,
     // has fewer cells and diverges far less inside a subgroup. Reporting the 2D
     // number as the headline would be flattering rather than honest.
-    let params = LayoutParams { three_d: true, ..Default::default() };
+    let params = LayoutParams {
+        three_d: true,
+        ..Default::default()
+    };
     let graph = gv_graph::testing::path(BODIES);
 
     let context = pollster::block_on(GpuContext::new(None)).expect("adapter available");
@@ -471,18 +510,28 @@ fn stress_100k() {
     // One untimed step first: the first submission pays for pipeline
     // compilation and buffer residency, which is not what is being measured.
     let mut encoder = context.device.create_command_encoder(&Default::default());
-    layout.record_step(&mut encoder, &context.queue, &params).expect("record");
+    layout
+        .record_step(&mut encoder, &context.queue, &params)
+        .expect("record");
     context.queue.submit([encoder.finish()]);
-    context.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+    context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
 
     let started = Instant::now();
     for _ in 0..STEPS {
         let mut encoder = context.device.create_command_encoder(&Default::default());
-        layout.record_step(&mut encoder, &context.queue, &params).expect("record");
+        layout
+            .record_step(&mut encoder, &context.queue, &params)
+            .expect("record");
         context.queue.submit([encoder.finish()]);
     }
     // The clock stops after the device drains, not after the last submit.
-    context.device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+    context
+        .device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
     let per_step = started.elapsed().as_secs_f64() * 1000.0 / f64::from(STEPS);
 
     let cells = pollster::block_on(layout.read_cell_count()).expect("readback");
@@ -492,7 +541,9 @@ fn stress_100k() {
     // truncated would otherwise look like a speedup.
     assert!(cells > 0 && cells < Tree::capacity_for(BODIES as u32));
     let nodes = pollster::block_on(buffers.read_nodes(&context)).expect("readback");
-    assert!(nodes.iter().all(|n| n.position.iter().all(|a| a.is_finite())));
+    assert!(
+        nodes
+            .iter()
+            .all(|n| n.position.iter().all(|a| a.is_finite()))
+    );
 }
-
-

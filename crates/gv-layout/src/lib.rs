@@ -180,14 +180,20 @@ mod tests {
 
     #[test]
     fn k_matches_the_glsl_formula() {
-        let params = LayoutParams { area: 1000.0, ..Default::default() };
+        let params = LayoutParams {
+            area: 1000.0,
+            ..Default::default()
+        };
         // (500 * 1000) / (1 + 999) == 500
         assert_eq!(params.k(999), 500.0);
     }
 
     #[test]
     fn max_displace_matches_the_glsl_formula() {
-        let params = LayoutParams { area: 2.0, ..Default::default() };
+        let params = LayoutParams {
+            area: 2.0,
+            ..Default::default()
+        };
         // sqrt(500 * 2) / 10 == 10 * sqrt(10) / 10
         assert!((params.max_displace() - 1000.0_f32.sqrt() / 10.0).abs() < 1e-6);
     }

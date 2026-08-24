@@ -23,7 +23,10 @@ use serde_json::{Value, json};
 use crate::server::Server;
 
 #[derive(Parser)]
-#[command(name = "rkg-mcp", about = "MCP server over a repository knowledge graph")]
+#[command(
+    name = "rkg-mcp",
+    about = "MCP server over a repository knowledge graph"
+)]
 struct Cli {
     /// Path to a graph JSON produced by `rkg build`.
     #[arg(short, long, env = "RKG_GRAPH", default_value = ".rkg/graph.json")]

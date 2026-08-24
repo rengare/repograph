@@ -77,11 +77,7 @@ mod tests {
             "src/main/java/app/Main.java",
             "src/main/java/util/Helper.java",
         ]);
-        let edges = extract(
-            "import util.Helper;\n",
-            "src/main/java/app/Main.java",
-            &r,
-        );
+        let edges = extract("import util.Helper;\n", "src/main/java/app/Main.java", &r);
         assert_eq!(edges[0].to, "file:src/main/java/util/Helper.java");
     }
 

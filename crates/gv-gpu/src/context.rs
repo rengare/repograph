@@ -47,7 +47,12 @@ impl GpuContext {
             })?;
 
         let info = adapter.get_info();
-        log::info!("adapter: {} ({:?}, {:?})", info.name, info.device_type, info.backend);
+        log::info!(
+            "adapter: {} ({:?}, {:?})",
+            info.name,
+            info.device_type,
+            info.backend
+        );
 
         // Ask for everything the adapter offers rather than the downlevel
         // defaults: the storage-buffer binding size is what caps graph size,

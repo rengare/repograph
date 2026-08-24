@@ -113,7 +113,12 @@ mod tests {
         // `area` is chosen so k lands within reach of the displacement ceiling
         // in the step budget: k = 2000, ceiling ≈ 1.94/step, ~465 steps to
         // cross from the starting separation.
-        let params = LayoutParams { speed: 100.0, area: 12.0, gravity: 0.0, three_d: false };
+        let params = LayoutParams {
+            speed: 100.0,
+            area: 12.0,
+            gravity: 0.0,
+            three_d: false,
+        };
         let mut graph = testing::dumbbell();
         graph.nodes[0].position = [-100.0, 0.0, 0.0, 1.0];
         graph.nodes[1].position = [100.0, 0.0, 0.0, 1.0];
@@ -142,7 +147,10 @@ mod tests {
 
     #[test]
     fn two_d_mode_never_leaves_the_plane() {
-        let params = LayoutParams { three_d: false, ..Default::default() };
+        let params = LayoutParams {
+            three_d: false,
+            ..Default::default()
+        };
         let mut graph = testing::path(32);
         for node in &mut graph.nodes {
             node.position[2] = 0.0;
@@ -185,7 +193,10 @@ mod tests {
     fn no_step_moves_a_node_further_than_the_displacement_ceiling() {
         // 3D, matching how the fixture is seeded: in 2D the step also flattens
         // z to zero, which is a legitimate move larger than the ceiling.
-        let params = LayoutParams { three_d: true, ..Default::default() };
+        let params = LayoutParams {
+            three_d: true,
+            ..Default::default()
+        };
         let mut graph = testing::path(32);
         let before: Vec<_> = graph.nodes.iter().map(|n| n.position).collect();
 
@@ -198,7 +209,10 @@ mod tests {
                 + (current[1] - previous[1]).powi(2)
                 + (current[2] - previous[2]).powi(2))
             .sqrt();
-            assert!(moved <= ceiling * 1.001, "node {index} moved {moved} > {ceiling}");
+            assert!(
+                moved <= ceiling * 1.001,
+                "node {index} moved {moved} > {ceiling}"
+            );
         }
     }
 
@@ -221,7 +235,12 @@ mod tests {
         // Attraction only outweighs repulsion beyond d = k, so `area` is set
         // to put k (= 5) well inside the 100..400 spacing. At the default area
         // k ≈ 8.3e4 and repulsion swamps the signal this test is looking for.
-        let params = LayoutParams { speed: 100.0, area: 0.06, gravity: 0.0, three_d: false };
+        let params = LayoutParams {
+            speed: 100.0,
+            area: 0.06,
+            gravity: 0.0,
+            three_d: false,
+        };
         run(&mut star, &params, 1);
 
         // All four neighbours sit at positive x, so the hub must move that way.

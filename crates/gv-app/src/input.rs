@@ -149,9 +149,17 @@ mod tests {
     #[test]
     fn every_movement_key_maps_to_something() {
         let keys = [
-            KeyCode::KeyW, KeyCode::KeyS, KeyCode::KeyA, KeyCode::KeyD,
-            KeyCode::KeyR, KeyCode::KeyF, KeyCode::ArrowLeft, KeyCode::ArrowRight,
-            KeyCode::ArrowUp, KeyCode::ArrowDown, KeyCode::Space,
+            KeyCode::KeyW,
+            KeyCode::KeyS,
+            KeyCode::KeyA,
+            KeyCode::KeyD,
+            KeyCode::KeyR,
+            KeyCode::KeyF,
+            KeyCode::ArrowLeft,
+            KeyCode::ArrowRight,
+            KeyCode::ArrowUp,
+            KeyCode::ArrowDown,
+            KeyCode::Space,
         ];
         for key in keys {
             let mut input = InputState::default();

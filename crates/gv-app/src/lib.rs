@@ -21,9 +21,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use gv_config::AppConfig;
-use gv_graph::{GraphData, seed::SeedOptions};
 #[cfg(not(target_arch = "wasm32"))]
 use gv_graph::loader;
+use gv_graph::{GraphData, seed::SeedOptions};
 #[cfg(not(target_arch = "wasm32"))]
 use gv_layout::LayoutParams;
 
@@ -77,7 +77,9 @@ fn run_windowed(
     // Poll rather than Wait: the layout advances every frame, so there is
     // always something to redraw.
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    event_loop.run_app(&mut app).context("running the event loop")?;
+    event_loop
+        .run_app(&mut app)
+        .context("running the event loop")?;
 
     Ok(())
 }
@@ -183,7 +185,10 @@ mod tests {
     #[test]
     fn a_missing_default_settings_file_is_not_an_error() {
         // Run from a directory with no settings.json: the defaults stand.
-        let cli = Cli { settings: None, ..Default::default() };
+        let cli = Cli {
+            settings: None,
+            ..Default::default()
+        };
         let config = load_config(&cli).expect("defaults should apply");
         assert_eq!(config.width, AppConfig::default().width);
     }

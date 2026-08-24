@@ -158,7 +158,10 @@ impl std::str::FromStr for LayoutChoice {
             .find(|choice| choice.slug().eq_ignore_ascii_case(text))
             .ok_or_else(|| {
                 let known: Vec<_> = Self::ALL.iter().map(|c| c.slug()).collect();
-                format!("unknown layout {text:?}; expected one of {}", known.join(", "))
+                format!(
+                    "unknown layout {text:?}; expected one of {}",
+                    known.join(", ")
+                )
             })
     }
 }
@@ -257,7 +260,10 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
 
     // Right edge: configuration — system, forces, algorithm.
     egui::Window::new("Configuration")
-        .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-PANEL_MARGIN, PANEL_MARGIN))
+        .anchor(
+            egui::Align2::RIGHT_TOP,
+            egui::vec2(-PANEL_MARGIN, PANEL_MARGIN),
+        )
         .resizable(false)
         .default_width(PANEL_WIDTH)
         .show(ctx, |ui| {
@@ -278,8 +284,9 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
                     .add(egui::DragValue::new(&mut config.wheel_zoom_speed).prefix("wheel zoom: "))
                     .changed()
                 {
-                    config.wheel_zoom_speed =
-                        config.wheel_zoom_speed.clamp(MIN_WHEEL_ZOOM, MAX_WHEEL_ZOOM);
+                    config.wheel_zoom_speed = config
+                        .wheel_zoom_speed
+                        .clamp(MIN_WHEEL_ZOOM, MAX_WHEEL_ZOOM);
                 }
 
                 ui.add_space(SECTION_GAP * 0.5);
@@ -291,10 +298,16 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
             section(ui, "Graph settings", |ui| {
                 // Clamped after every edit, not only on commit: an intermediate
                 // value still feeds the next layout step.
-                if ui.add(egui::DragValue::new(&mut params.speed).prefix("speed: ")).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut params.speed).prefix("speed: "))
+                    .changed()
+                {
                     params.speed = params.speed.clamp(*SPEED_RANGE.start(), *SPEED_RANGE.end());
                 }
-                if ui.add(egui::DragValue::new(&mut params.area).prefix("area: ")).changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut params.area).prefix("area: "))
+                    .changed()
+                {
                     params.area = params.area.max(MIN_AREA);
                 }
                 ui.add(egui::DragValue::new(&mut params.gravity).prefix("gravity: "));
@@ -345,7 +358,10 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
 
     // Left edge: browsing — stats, search, inspector.
     egui::Window::new("Browser")
-        .anchor(egui::Align2::LEFT_TOP, egui::vec2(PANEL_MARGIN, PANEL_MARGIN))
+        .anchor(
+            egui::Align2::LEFT_TOP,
+            egui::vec2(PANEL_MARGIN, PANEL_MARGIN),
+        )
         .resizable(false)
         .default_width(PANEL_WIDTH)
         .show(ctx, |ui| {
@@ -355,7 +371,11 @@ pub fn draw(ctx: &egui::Context, state: GuiState<'_>) -> GuiActions {
                 ui.label(format!("algorithm duration: {layout_seconds:.0} s"));
                 ui.label(format!(
                     "{frame_time_ms:.3} ms/frame ({:.1} FPS)",
-                    if frame_time_ms > 0.0 { 1000.0 / frame_time_ms } else { 0.0 }
+                    if frame_time_ms > 0.0 {
+                        1000.0 / frame_time_ms
+                    } else {
+                        0.0
+                    }
                 ));
             });
 
@@ -446,7 +466,10 @@ fn draw_inspector(ui: &mut egui::Ui, meta: &NodeMeta, actions: &mut GuiActions) 
     ui.horizontal(|ui| {
         ui.strong(&meta.name);
         // Prefer the specific symbol sub-kind (fn/struct/…) over the coarse kind.
-        let tag = meta.symbol_kind.as_deref().unwrap_or_else(|| meta.kind.tag_short());
+        let tag = meta
+            .symbol_kind
+            .as_deref()
+            .unwrap_or_else(|| meta.kind.tag_short());
         ui.label(format!("[{tag}]"));
     });
 
@@ -618,7 +641,10 @@ mod tests {
     #[test]
     fn from_str_is_case_insensitive() {
         assert_eq!(LayoutChoice::from_str("GPU"), Ok(LayoutChoice::FrGpu));
-        assert_eq!(LayoutChoice::from_str("Barnes-Hut"), Ok(LayoutChoice::FrBarnesHut));
+        assert_eq!(
+            LayoutChoice::from_str("Barnes-Hut"),
+            Ok(LayoutChoice::FrBarnesHut)
+        );
     }
 
     #[test]
@@ -651,8 +677,11 @@ mod tests {
 
     /// Runs the panels headlessly. `egui::Context::run_ui` needs no window, so
     /// the real `draw` is exercised — not a stand-in.
-    fn run_draw(config: &mut AppConfig, params: &mut LayoutParams, choice: &mut LayoutChoice)
-    -> GuiActions {
+    fn run_draw(
+        config: &mut AppConfig,
+        params: &mut LayoutParams,
+        choice: &mut LayoutChoice,
+    ) -> GuiActions {
         let ctx = egui::Context::default();
         let mut actions = GuiActions::default();
         let mut search = SearchState::default();
@@ -751,7 +780,10 @@ mod tests {
     fn speed_is_clamped_into_the_originals_range() {
         // The original clamped speed into 0.1..=1000 inside its InputFloat
         // handler; a negative speed reverses every displacement.
-        let mut params = LayoutParams { speed: -5.0, ..Default::default() };
+        let mut params = LayoutParams {
+            speed: -5.0,
+            ..Default::default()
+        };
         clamp_params(&mut params);
         assert_eq!(params.speed, *SPEED_RANGE.start());
 
@@ -763,7 +795,10 @@ mod tests {
     #[test]
     fn area_cannot_be_driven_to_zero_or_below() {
         // k is proportional to area, and a non-positive k inverts every force.
-        let mut params = LayoutParams { area: 0.0, ..Default::default() };
+        let mut params = LayoutParams {
+            area: 0.0,
+            ..Default::default()
+        };
         clamp_params(&mut params);
         assert_eq!(params.area, MIN_AREA);
 
@@ -774,7 +809,11 @@ mod tests {
 
     #[test]
     fn clamping_leaves_values_in_range_alone() {
-        let mut params = LayoutParams { speed: 100.0, area: 1000.0, ..Default::default() };
+        let mut params = LayoutParams {
+            speed: 100.0,
+            area: 1000.0,
+            ..Default::default()
+        };
         let before = params;
         clamp_params(&mut params);
         assert_eq!(params, before);
@@ -784,7 +823,10 @@ mod tests {
     fn gravity_is_deliberately_unclamped() {
         // Negative gravity pushes nodes away from the origin, which is a
         // legitimate thing to explore; the original did not clamp it either.
-        let mut params = LayoutParams { gravity: -3.0, ..Default::default() };
+        let mut params = LayoutParams {
+            gravity: -3.0,
+            ..Default::default()
+        };
         clamp_params(&mut params);
         assert_eq!(params.gravity, -3.0);
     }

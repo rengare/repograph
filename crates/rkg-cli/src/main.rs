@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rkg_core::export::{self, ExportOptions};
 use rkg_core::query::{self, Direction};
@@ -161,7 +161,11 @@ fn is_repograph_source(dir: &Path) -> bool {
 
 /// Whether an executable named `rkg-mcp` is resolvable on `PATH`.
 fn rkg_mcp_on_path() -> bool {
-    let name = if cfg!(windows) { "rkg-mcp.exe" } else { "rkg-mcp" };
+    let name = if cfg!(windows) {
+        "rkg-mcp.exe"
+    } else {
+        "rkg-mcp"
+    };
     let Some(path) = std::env::var_os("PATH") else {
         return false;
     };
@@ -529,7 +533,10 @@ mod tests {
             no_install: true,
         })
         .unwrap_err();
-        assert!(error.to_string().contains("not a repograph checkout"), "{error}");
+        assert!(
+            error.to_string().contains("not a repograph checkout"),
+            "{error}"
+        );
         fs::remove_dir_all(project).unwrap();
     }
 

@@ -66,7 +66,11 @@ pub fn extract(content: &str, rel: &str, resolver: &Resolver) -> Vec<Edge> {
                 } else {
                     push(resolve_relative(&base, &module_path, resolver));
                     for name in &names {
-                        push(resolve_relative(&base, &format!("{module_path}/{name}"), resolver));
+                        push(resolve_relative(
+                            &base,
+                            &format!("{module_path}/{name}"),
+                            resolver,
+                        ));
                     }
                 }
             }

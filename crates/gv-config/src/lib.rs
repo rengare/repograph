@@ -121,7 +121,7 @@ impl AppConfig {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".to_owned(),
             Err(error) => {
                 return Err(error)
-                    .with_context(|| format!("reading settings from {}", path.display()))
+                    .with_context(|| format!("reading settings from {}", path.display()));
             }
         };
         let mut json: serde_json::Value = serde_json::from_str(&text)

@@ -39,7 +39,10 @@ mod tests {
         RandomLayout.step(&mut graph, &LayoutParams::default());
 
         for (index, previous) in before.iter().enumerate() {
-            assert_ne!(graph.nodes[index].position, *previous, "node {index} did not move");
+            assert_ne!(
+                graph.nodes[index].position, *previous,
+                "node {index} did not move"
+            );
         }
     }
 
@@ -58,7 +61,10 @@ mod tests {
                 + (current[1] - previous[1]).powi(2)
                 + (current[2] - previous[2]).powi(2))
             .sqrt();
-            assert!(moved <= ceiling * 1.001, "node {index} moved {moved} > {ceiling}");
+            assert!(
+                moved <= ceiling * 1.001,
+                "node {index} moved {moved} > {ceiling}"
+            );
         }
     }
 
@@ -69,7 +75,13 @@ mod tests {
         for node in &mut graph.nodes {
             node.position[2] = 0.0;
         }
-        RandomLayout.step(&mut graph, &LayoutParams { three_d: false, ..Default::default() });
+        RandomLayout.step(
+            &mut graph,
+            &LayoutParams {
+                three_d: false,
+                ..Default::default()
+            },
+        );
         assert!(graph.nodes.iter().all(|node| node.position[2] == 0.0));
     }
 

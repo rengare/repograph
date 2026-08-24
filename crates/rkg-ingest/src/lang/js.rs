@@ -9,7 +9,16 @@ use crate::resolver::Resolver;
 
 /// Suffix candidates tried, in order, when resolving a relative specifier.
 const SUFFIXES: &[&str] = &[
-    "", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.tsx", "/index.js",
+    "",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    "/index.ts",
+    "/index.tsx",
+    "/index.js",
     "/index.jsx",
 ];
 

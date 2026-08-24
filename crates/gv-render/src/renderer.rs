@@ -404,7 +404,12 @@ mod tests {
     #[test]
     fn clear_colour_is_normalised_from_the_gui_range() {
         // The GUI sliders write 0..=255; the surface wants 0..=1.
-        let config = AppConfig { red: 255.0, green: 0.0, blue: 51.0, ..Default::default() };
+        let config = AppConfig {
+            red: 255.0,
+            green: 0.0,
+            blue: 51.0,
+            ..Default::default()
+        };
         let [r, g, b, a] = config.clear_color();
         assert!((r - 1.0).abs() < 1e-9);
         assert_eq!(g, 0.0);

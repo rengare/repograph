@@ -18,7 +18,10 @@ pub fn from_edges(node_count: usize, edges: Vec<Edge>, rng_seed: u64) -> GraphDa
     };
     seed::scatter(
         &mut graph,
-        seed::SeedOptions { seed: rng_seed, ..Default::default() },
+        seed::SeedOptions {
+            seed: rng_seed,
+            ..Default::default()
+        },
     );
     graph
 }
@@ -32,7 +35,10 @@ pub fn dumbbell() -> GraphData {
 /// A path `0 - 1 - ... - (n - 1)`.
 pub fn path(node_count: usize) -> GraphData {
     let edges = (0..node_count.saturating_sub(1))
-        .map(|i| Edge { from: i as u32, to: i as u32 + 1 })
+        .map(|i| Edge {
+            from: i as u32,
+            to: i as u32 + 1,
+        })
         .collect();
     from_edges(node_count, edges, 0)
 }

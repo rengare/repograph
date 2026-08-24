@@ -235,7 +235,11 @@ mod tests {
         let mut camera = Camera::default();
         camera.resize(100, 100);
         let clip = camera.projection_matrix() * glam::Vec4::new(0.0, 0.0, -camera.near, 1.0);
-        assert!((clip.z / clip.w).abs() < 1e-4, "near plane at {}", clip.z / clip.w);
+        assert!(
+            (clip.z / clip.w).abs() < 1e-4,
+            "near plane at {}",
+            clip.z / clip.w
+        );
     }
 
     #[test]
@@ -243,7 +247,11 @@ mod tests {
         let mut camera = Camera::default();
         camera.resize(100, 100);
         let clip = camera.projection_matrix() * glam::Vec4::new(0.0, 0.0, -camera.far, 1.0);
-        assert!((clip.z / clip.w - 1.0).abs() < 1e-3, "far plane at {}", clip.z / clip.w);
+        assert!(
+            (clip.z / clip.w - 1.0).abs() < 1e-3,
+            "far plane at {}",
+            clip.z / clip.w
+        );
     }
 
     #[test]

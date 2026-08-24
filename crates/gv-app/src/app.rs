@@ -12,13 +12,13 @@ use std::time::Duration;
 use web_time::Instant;
 
 use anyhow::{Context, Result};
+use glam::{Vec3, Vec4};
 use gv_config::AppConfig;
 use gv_gpu::{GpuContext, GraphBuffers};
 use gv_graph::{GraphData, seed::SeedOptions};
 use gv_gui::{GuiActions, GuiState, KindVisibility, LayoutChoice};
 use gv_layout::LayoutParams;
 use gv_render::{Camera, Renderer};
-use glam::{Vec3, Vec4};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -64,8 +64,16 @@ fn fit_canvas_to_window(window: &Window) {
     let Some(web) = web_sys::window() else {
         return;
     };
-    let width = web.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
-    let height = web.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(720.0);
+    let width = web
+        .inner_width()
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1280.0);
+    let height = web
+        .inner_height()
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(720.0);
     let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(
         width.max(1.0) as u32,
         height.max(1.0) as u32,
@@ -187,8 +195,7 @@ fn project_labels(
         {
             continue;
         }
-        let clip = view_proj
-            * Vec4::new(node.position[0], node.position[1], node.position[2], 1.0);
+        let clip = view_proj * Vec4::new(node.position[0], node.position[1], node.position[2], 1.0);
         if clip.w <= 0.0 {
             continue; // behind the camera
         }
@@ -225,7 +232,13 @@ fn selected_neighborhood(graph: &GraphData, selected: usize, depth: u32) -> Vec<
         }
         for edge in &graph.edges {
             let (from, to) = (edge.from as usize, edge.to as usize);
-            let neighbor = if from == node { Some(to) } else if to == node { Some(from) } else { None };
+            let neighbor = if from == node {
+                Some(to)
+            } else if to == node {
+                Some(from)
+            } else {
+                None
+            };
             if let Some(neighbor) = neighbor.filter(|&neighbor| neighbor < neighborhood.len()) {
                 if !neighborhood[neighbor] {
                     neighborhood[neighbor] = true;
@@ -466,7 +479,9 @@ impl App {
             gv_graph::seed::scatter(&mut self.graph, self.seed_options);
             self.layout_elapsed = Duration::ZERO;
             if let Some(active) = &self.active {
-                active.buffers.write_nodes(&active.context, &self.graph.nodes);
+                active
+                    .buffers
+                    .write_nodes(&active.context, &self.graph.nodes);
             }
         }
 
@@ -495,7 +510,9 @@ impl App {
             if prev < self.graph.nodes.len() {
                 self.graph.nodes[prev].size = size;
                 if let Some(active) = &self.active {
-                    active.buffers.write_nodes(&active.context, &self.graph.nodes);
+                    active
+                        .buffers
+                        .write_nodes(&active.context, &self.graph.nodes);
                 }
             }
         }
@@ -598,7 +615,9 @@ impl App {
         self.inspected = Some(idx);
 
         if let Some(active) = &self.active {
-            active.buffers.write_nodes(&active.context, &self.graph.nodes);
+            active
+                .buffers
+                .write_nodes(&active.context, &self.graph.nodes);
         }
         Ok(())
     }
@@ -664,7 +683,8 @@ impl App {
             if !self.kind_visible(i) {
                 continue;
             }
-            let view_pos = view * Vec4::new(node.position[0], node.position[1], node.position[2], 1.0);
+            let view_pos =
+                view * Vec4::new(node.position[0], node.position[1], node.position[2], 1.0);
             if view_pos.z >= 0.0 {
                 continue; // behind the camera
             }
@@ -774,10 +794,8 @@ impl App {
                 fit_canvas_to_window(&on_resize);
             });
             if let Some(web) = web_sys::window() {
-                let _ = web.add_event_listener_with_callback(
-                    "resize",
-                    closure.as_ref().unchecked_ref(),
-                );
+                let _ = web
+                    .add_event_listener_with_callback("resize", closure.as_ref().unchecked_ref());
             }
             closure.forget(); // lives for the page's lifetime
         }
@@ -814,7 +832,11 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let context = pollster::block_on(GpuContext::from_instance(instance, Some(&surface)))?;
-            *self.pending.borrow_mut() = Some(PendingGpu { window, surface, context });
+            *self.pending.borrow_mut() = Some(PendingGpu {
+                window,
+                surface,
+                context,
+            });
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -823,7 +845,11 @@ impl App {
                 match GpuContext::from_instance(instance, Some(&surface)).await {
                     Ok(context) => {
                         let redraw = window.clone();
-                        *pending.borrow_mut() = Some(PendingGpu { window, surface, context });
+                        *pending.borrow_mut() = Some(PendingGpu {
+                            window,
+                            surface,
+                            context,
+                        });
                         redraw.request_redraw();
                     }
                     Err(error) => log::error!("GPU init failed: {error:#}"),
@@ -839,7 +865,12 @@ impl App {
         if self.active.is_some() {
             return Ok(());
         }
-        let Some(PendingGpu { window, surface, context }) = self.pending.borrow_mut().take() else {
+        let Some(PendingGpu {
+            window,
+            surface,
+            context,
+        }) = self.pending.borrow_mut().take()
+        else {
             return Ok(());
         };
 
@@ -872,7 +903,11 @@ impl App {
         log::info!(
             "layout: {} ({})",
             self.layout.name(),
-            if self.layout.is_gpu() { "on device" } else { "on host" }
+            if self.layout.is_gpu() {
+                "on device"
+            } else {
+                "on host"
+            }
         );
 
         self.camera.resize(size.width, size.height);
@@ -1075,9 +1110,12 @@ impl App {
             .tessellate(output.shapes, pixels_per_point);
 
         for (id, delta) in &output.textures_delta.set {
-            active
-                .egui_renderer
-                .update_texture(&active.context.device, &active.context.queue, *id, delta);
+            active.egui_renderer.update_texture(
+                &active.context.device,
+                &active.context.queue,
+                *id,
+                delta,
+            );
         }
 
         let (width, height) = active.renderer.size();
@@ -1174,14 +1212,24 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                     return;
                 }
-                self.input.set_key(code, event.state == ElementState::Pressed);
+                self.input
+                    .set_key(code, event.state == ElementState::Pressed);
             }
 
-            WindowEvent::MouseInput { button: MouseButton::Right, state, .. } => {
-                self.input.set_looking(!consumed && state == ElementState::Pressed);
+            WindowEvent::MouseInput {
+                button: MouseButton::Right,
+                state,
+                ..
+            } => {
+                self.input
+                    .set_looking(!consumed && state == ElementState::Pressed);
             }
 
-            WindowEvent::MouseInput { button: MouseButton::Left, state, .. } => {
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state,
+                ..
+            } => {
                 if !consumed && state == ElementState::Pressed {
                     if let Err(error) = self.handle_click() {
                         log::error!("click picking failed: {error:#}");
@@ -1256,7 +1304,12 @@ mod tests {
 
     #[test]
     fn settings_initialise_the_layout_parameters() {
-        let config = AppConfig { speed: 42.0, area: 12.5, gravity: -3.0, ..Default::default() };
+        let config = AppConfig {
+            speed: 42.0,
+            area: 12.5,
+            gravity: -3.0,
+            ..Default::default()
+        };
         let app = App::new(
             config,
             gv_graph::testing::triangle(),
@@ -1272,7 +1325,8 @@ mod tests {
 
     #[test]
     fn changed_layout_parameters_are_saved_to_settings() {
-        let path = std::env::temp_dir().join(format!("gv-app-settings-{}.json", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("gv-app-settings-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let mut app = app_of(gv_graph::testing::triangle());
         app.set_settings_path(path.clone());
@@ -1285,7 +1339,12 @@ mod tests {
 
         let saved = AppConfig::load(&path).unwrap();
         assert_eq!(
-            (saved.speed, saved.area, saved.gravity, saved.selection_depth),
+            (
+                saved.speed,
+                saved.area,
+                saved.gravity,
+                saved.selection_depth
+            ),
             (42.0, 12.5, -3.0, 3)
         );
         std::fs::remove_file(path).unwrap();
@@ -1303,7 +1362,10 @@ mod tests {
 
     #[test]
     fn the_three_d_toggle_reaches_the_layout_params() {
-        let config = AppConfig { graph_type_3d: false, ..Default::default() };
+        let config = AppConfig {
+            graph_type_3d: false,
+            ..Default::default()
+        };
         let app = App::new(
             config,
             gv_graph::testing::triangle(),
@@ -1334,8 +1396,11 @@ mod tests {
 
         // Disturb it, then ask for a reseed.
         app.graph.nodes[0].position = [999.0, 999.0, 999.0, 1.0];
-        app.apply_gui_actions(GuiActions { reseed: true, ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            reseed: true,
+            ..Default::default()
+        })
+        .unwrap();
 
         assert_eq!(app.graph.nodes, seeded);
     }
@@ -1345,8 +1410,11 @@ mod tests {
         let mut app = app_of(gv_graph::testing::triangle());
         app.layout_elapsed = Duration::from_secs(42);
 
-        app.apply_gui_actions(GuiActions { reseed: true, ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            reseed: true,
+            ..Default::default()
+        })
+        .unwrap();
 
         assert_eq!(app.layout_elapsed, Duration::ZERO);
     }
@@ -1358,8 +1426,11 @@ mod tests {
         let moved = app.camera.position;
         app.camera.rotation.y = 33.0;
 
-        app.apply_gui_actions(GuiActions { reset_camera: true, ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            reset_camera: true,
+            ..Default::default()
+        })
+        .unwrap();
 
         assert_eq!(app.camera.rotation.y, 0.0);
         assert_eq!(app.camera.position, moved);
@@ -1370,8 +1441,11 @@ mod tests {
         let mut app = app_of(gv_graph::testing::triangle());
         let original = app.graph.nodes[1].size;
 
-        app.apply_gui_actions(GuiActions { focus_node: Some(1), ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            focus_node: Some(1),
+            ..Default::default()
+        })
+        .unwrap();
 
         assert_eq!(app.graph.nodes[1].size, original * HIGHLIGHT_SCALE);
         assert_eq!(app.selected_highlight, Some((1, original)));
@@ -1385,10 +1459,16 @@ mod tests {
         let size0 = app.graph.nodes[0].size;
         let size2 = app.graph.nodes[2].size;
 
-        app.apply_gui_actions(GuiActions { focus_node: Some(0), ..Default::default() })
-            .unwrap();
-        app.apply_gui_actions(GuiActions { focus_node: Some(2), ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            focus_node: Some(0),
+            ..Default::default()
+        })
+        .unwrap();
+        app.apply_gui_actions(GuiActions {
+            focus_node: Some(2),
+            ..Default::default()
+        })
+        .unwrap();
 
         // Node 0 back to its original size, node 2 now the enlarged one.
         assert_eq!(app.graph.nodes[0].size, size0);
@@ -1402,10 +1482,7 @@ mod tests {
 
         let mut app = app_of(gv_graph::testing::triangle());
         // A path 0 — 1 — 2 (node 0 not connected to node 2 directly).
-        app.graph.edges = vec![
-            Edge { from: 0, to: 1 },
-            Edge { from: 1, to: 2 },
-        ];
+        app.graph.edges = vec![Edge { from: 0, to: 1 }, Edge { from: 1, to: 2 }];
 
         let mask = app.dim_mask(1);
 
@@ -1434,13 +1511,27 @@ mod tests {
 
         let graph = GraphData {
             nodes: vec![
-                Node { position: [0.0, 0.0, 0.0, 1.0], ..Default::default() },
+                Node {
+                    position: [0.0, 0.0, 0.0, 1.0],
+                    ..Default::default()
+                },
                 // Past the camera (which sits at z=-700 looking toward +z).
-                Node { position: [0.0, 0.0, 5000.0, 1.0], ..Default::default() },
+                Node {
+                    position: [0.0, 0.0, 5000.0, 1.0],
+                    ..Default::default()
+                },
             ],
             meta: vec![
-                NodeMeta { name: "origin".into(), kind: NodeCategory::File, ..Default::default() },
-                NodeMeta { name: "behind".into(), kind: NodeCategory::File, ..Default::default() },
+                NodeMeta {
+                    name: "origin".into(),
+                    kind: NodeCategory::File,
+                    ..Default::default()
+                },
+                NodeMeta {
+                    name: "behind".into(),
+                    kind: NodeCategory::File,
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };
@@ -1453,11 +1544,18 @@ mod tests {
         assert_eq!(labels[0].1, "origin");
 
         // Hiding files removes both labels.
-        let no_files = KindVisibility { file: false, ..Default::default() };
+        let no_files = KindVisibility {
+            file: false,
+            ..Default::default()
+        };
         assert!(project_labels(&camera, &graph, &no_files, None, 1, 800.0, 600.0, 1.0).is_empty());
         // It projects to roughly the centre of an 800x600 view.
         assert!((labels[0].0.x - 400.0).abs() < 1.0, "x={}", labels[0].0.x);
-        assert!((labels[0].0.y - (300.0 - LABEL_OFFSET)).abs() < 1.0, "y={}", labels[0].0.y);
+        assert!(
+            (labels[0].0.y - (300.0 - LABEL_OFFSET)).abs() < 1.0,
+            "y={}",
+            labels[0].0.y
+        );
     }
 
     #[test]
@@ -1482,9 +1580,18 @@ mod tests {
         camera.resize(800, 600);
         let graph = GraphData {
             nodes: vec![
-                Node { position: [0.0, 0.0, 0.0, 1.0], ..Default::default() },
-                Node { position: [100.0, 0.0, 0.0, 1.0], ..Default::default() },
-                Node { position: [200.0, 0.0, 0.0, 1.0], ..Default::default() },
+                Node {
+                    position: [0.0, 0.0, 0.0, 1.0],
+                    ..Default::default()
+                },
+                Node {
+                    position: [100.0, 0.0, 0.0, 1.0],
+                    ..Default::default()
+                },
+                Node {
+                    position: [200.0, 0.0, 0.0, 1.0],
+                    ..Default::default()
+                },
             ],
             edges: vec![Edge { from: 0, to: 1 }, Edge { from: 1, to: 2 }],
             meta: ["selected", "neighbour", "dimmed"]
@@ -1559,7 +1666,9 @@ mod tests {
         // Perpendicular from a point above the middle of a horizontal segment.
         assert!((point_segment_distance((0.0, 5.0), (-10.0, 0.0), (10.0, 0.0)) - 5.0).abs() < 1e-4);
         // Beyond an endpoint clamps to that endpoint.
-        assert!((point_segment_distance((13.0, 0.0), (-10.0, 0.0), (10.0, 0.0)) - 3.0).abs() < 1e-4);
+        assert!(
+            (point_segment_distance((13.0, 0.0), (-10.0, 0.0), (10.0, 0.0)) - 3.0).abs() < 1e-4
+        );
         // On the segment is zero.
         assert!(point_segment_distance((0.0, 0.0), (-10.0, 0.0), (10.0, 0.0)) < 1e-4);
     }
@@ -1588,8 +1697,16 @@ mod tests {
     fn pick_edge_hits_the_line_between_two_nodes() {
         let graph = GraphData {
             nodes: vec![
-                gv_graph::Node { position: [0.0, 0.0, 0.0, 1.0], size: 5.0, ..Default::default() },
-                gv_graph::Node { position: [300.0, 0.0, 0.0, 1.0], size: 5.0, ..Default::default() },
+                gv_graph::Node {
+                    position: [0.0, 0.0, 0.0, 1.0],
+                    size: 5.0,
+                    ..Default::default()
+                },
+                gv_graph::Node {
+                    position: [300.0, 0.0, 0.0, 1.0],
+                    size: 5.0,
+                    ..Default::default()
+                },
             ],
             edges: vec![gv_graph::Edge { from: 0, to: 1 }],
             ..Default::default()
@@ -1614,8 +1731,11 @@ mod tests {
     #[test]
     fn focusing_an_out_of_range_node_is_ignored() {
         let mut app = app_of(gv_graph::testing::triangle());
-        app.apply_gui_actions(GuiActions { focus_node: Some(999), ..Default::default() })
-            .unwrap();
+        app.apply_gui_actions(GuiActions {
+            focus_node: Some(999),
+            ..Default::default()
+        })
+        .unwrap();
         assert_eq!(app.selected_highlight, None);
     }
 

@@ -104,7 +104,10 @@ fn symbol_name<'t>(node: Node<'t>, spec: &SymbolSpec) -> Option<Node<'t>> {
     // JS/TS `const f = () => …`.
     if spec.value_fn_decl && kind == "variable_declarator" {
         let value = node.child_by_field_name("value")?;
-        if matches!(value.kind(), "arrow_function" | "function" | "function_expression") {
+        if matches!(
+            value.kind(),
+            "arrow_function" | "function" | "function_expression"
+        ) {
             return node.child_by_field_name("name");
         }
     }
@@ -125,9 +128,9 @@ fn name_of(node: Node) -> Option<Node> {
     match cur.kind() {
         "identifier" | "field_identifier" | "type_identifier" => Some(cur),
         // `void Foo::bar()` — take the last identifier of the qualified name.
-        "qualified_identifier" | "scoped_identifier" => {
-            cur.child_by_field_name("name").or_else(|| last_identifier(cur))
-        }
+        "qualified_identifier" | "scoped_identifier" => cur
+            .child_by_field_name("name")
+            .or_else(|| last_identifier(cur)),
         _ => None,
     }
 }
@@ -183,7 +186,13 @@ fn collect_locals(node: Node, spec: &SymbolSpec, src: &[u8], own: &str) -> Vec<S
     names
 }
 
-fn walk_locals(node: Node, spec: &SymbolSpec, src: &[u8], set: &mut HashSet<String>, is_root: bool) {
+fn walk_locals(
+    node: Node,
+    spec: &SymbolSpec,
+    src: &[u8],
+    set: &mut HashSet<String>,
+    is_root: bool,
+) {
     if !is_root && spec.defs.contains(&node.kind()) {
         return; // a nested definition owns its own scope
     }
@@ -262,7 +271,10 @@ fn binding_names(node: Node, src: &[u8], set: &mut HashSet<String>) {
         return;
     }
     let mut cursor = node.walk();
-    if let Some(id) = node.children(&mut cursor).find(|c| c.kind() == "identifier") {
+    if let Some(id) = node
+        .children(&mut cursor)
+        .find(|c| c.kind() == "identifier")
+    {
         push_ident(id, src, set);
     }
 }
@@ -291,8 +303,11 @@ fn push_ident(node: Node, src: &[u8], set: &mut HashSet<String>) {
 /// supported languages (kinds don't collide in meaning between grammars).
 fn kind_label(node_kind: &str) -> &'static str {
     match node_kind {
-        "function_item" | "function_declaration" | "generator_function_declaration"
-        | "function_definition" | "variable_declarator" => "fn",
+        "function_item"
+        | "function_declaration"
+        | "generator_function_declaration"
+        | "function_definition"
+        | "variable_declarator" => "fn",
         "method_definition" | "method_declaration" => "method",
         "constructor_declaration" => "constructor",
         "struct_item" | "struct_specifier" | "struct_declaration" => "struct",
@@ -303,7 +318,9 @@ fn kind_label(node_kind: &str) -> &'static str {
         "const_item" => "const",
         "static_item" => "static",
         "macro_definition" => "macro",
-        "class_declaration" | "abstract_class_declaration" | "class_definition"
+        "class_declaration"
+        | "abstract_class_declaration"
+        | "class_definition"
         | "class_specifier" => "class",
         "interface_declaration" => "interface",
         "record_declaration" => "record",
@@ -316,8 +333,15 @@ fn kind_label(node_kind: &str) -> &'static str {
 /// Body-block node kinds, so `signature_text` can stop at the body even when the
 /// grammar doesn't expose it as a `body` field (e.g. Kotlin).
 const BODY_KINDS: &[&str] = &[
-    "block", "function_body", "compound_statement", "declaration_list", "class_body",
-    "field_declaration_list", "interface_body", "enum_body", "enumerator_list",
+    "block",
+    "function_body",
+    "compound_statement",
+    "declaration_list",
+    "class_body",
+    "field_declaration_list",
+    "interface_body",
+    "enum_body",
+    "enumerator_list",
 ];
 
 /// The declaration text up to (but excluding) the body, collapsed to one line.
@@ -494,9 +518,13 @@ fn callee_name(call: Node, src: &[u8]) -> Option<String> {
 /// The last `.`/`::`-separated segment of a path, stripped of any generic/call
 /// tail, if it is a plain identifier.
 fn last_segment(text: &str) -> Option<String> {
-    let seg = text.split(['.', ':']).filter(|s| !s.is_empty()).next_back()?;
+    let seg = text
+        .split(['.', ':'])
+        .filter(|s| !s.is_empty())
+        .next_back()?;
     let seg = seg.split(['<', '(', '!', '[']).next().unwrap_or(seg).trim();
-    (!seg.is_empty() && seg.chars().all(|c| c.is_alphanumeric() || c == '_')).then(|| seg.to_string())
+    (!seg.is_empty() && seg.chars().all(|c| c.is_alphanumeric() || c == '_'))
+        .then(|| seg.to_string())
 }
 
 /// Parameters of a definition with their names and, when knowable, types (declared
@@ -517,14 +545,19 @@ fn extract_params(node: Node, src: &[u8]) -> Vec<Param> {
         }
         let mut names = HashSet::new();
         match param.kind() {
-            "identifier" | "shorthand_property_identifier_pattern" => push_ident(param, src, &mut names),
+            "identifier" | "shorthand_property_identifier_pattern" => {
+                push_ident(param, src, &mut names)
+            }
             _ => binding_names(param, src, &mut names),
         }
         let ty = param_type(param, src);
         let mut names: Vec<String> = names.into_iter().collect();
         names.sort_unstable();
         for name in names {
-            out.push(Param { name, ty: ty.clone() });
+            out.push(Param {
+                name,
+                ty: ty.clone(),
+            });
         }
     }
     out
@@ -587,12 +620,7 @@ fn infer_return_from_body(node: Node, spec: &SymbolSpec, src: &[u8]) -> Option<T
 /// Visits `return` statements under `node`, calling `sink` with each returned
 /// expression's inferred type. Stops at nested definitions (their returns are not
 /// this symbol's). A return whose value can't be inferred yields nothing.
-fn collect_return_types(
-    node: Node,
-    spec: &SymbolSpec,
-    src: &[u8],
-    sink: &mut impl FnMut(String),
-) {
+fn collect_return_types(node: Node, spec: &SymbolSpec, src: &[u8], sink: &mut impl FnMut(String)) {
     if node.kind() == "return_statement" {
         if let Some(value) = node.named_child(0) {
             if let Some(t) = infer_type(value, src) {
@@ -624,11 +652,16 @@ fn infer_type(expr: Node, src: &[u8]) -> Option<TypeRef> {
         "float"
     } else if k.contains("char") && !k.contains("character_") {
         "char"
-    } else if k == "string" || k.contains("string_literal") || k == "template_string"
-        || k == "raw_string_literal" || k == "interpolated_string_expression"
+    } else if k == "string"
+        || k.contains("string_literal")
+        || k == "template_string"
+        || k == "raw_string_literal"
+        || k == "interpolated_string_expression"
     {
         "string"
-    } else if k == "integer" || k == "integer_literal" || k == "int_literal"
+    } else if k == "integer"
+        || k == "integer_literal"
+        || k == "int_literal"
         || k == "decimal_integer_literal"
     {
         "int"
@@ -674,7 +707,15 @@ fn constructor_type(expr: Node, src: &[u8]) -> Option<String> {
 fn constructor_from_callee(text: &str) -> Option<String> {
     let segs: Vec<&str> = text.split(['.', ':']).filter(|s| !s.is_empty()).collect();
     let last = *segs.last()?;
-    const CTOR_METHODS: &[&str] = &["new", "create", "from", "default", "with_capacity", "of", "make"];
+    const CTOR_METHODS: &[&str] = &[
+        "new",
+        "create",
+        "from",
+        "default",
+        "with_capacity",
+        "of",
+        "make",
+    ];
     if segs.len() >= 2 && CTOR_METHODS.contains(&last) {
         if let Some(ty) = segs.iter().rev().skip(1).find(|s| starts_upper(s)) {
             return last_segment(ty);
@@ -729,7 +770,9 @@ pub fn classify_role(sym: &SymbolDef) -> Option<String> {
         "get" | "fetch" | "find" | "lookup" | "peek" => "accessor",
         "set" | "put" | "update" | "insert" | "add" | "remove" | "delete" | "push" | "pop"
         | "clear" | "reset" | "append" => "mutator",
-        "is" | "has" | "can" | "should" | "contains" | "exists" | "equals" | "matches" => "predicate",
+        "is" | "has" | "can" | "should" | "contains" | "exists" | "equals" | "matches" => {
+            "predicate"
+        }
         "to" | "into" | "as" | "from" | "parse" | "serialize" | "deserialize" | "convert"
         | "format" | "encode" | "decode" | "render" => "converter",
         "on" | "handle" => "handler",
@@ -872,10 +915,18 @@ pub fn build(path: &str, n: usize) -> Csr {
         let build = find(&syms, "build");
 
         // Params carry their declared types (inferred = false).
-        let path = build.params.iter().find(|p| p.name == "path").expect("path param");
+        let path = build
+            .params
+            .iter()
+            .find(|p| p.name == "path")
+            .expect("path param");
         assert_eq!(path.ty.as_ref().unwrap().ty, "&str");
         assert!(!path.ty.as_ref().unwrap().inferred);
-        let n = build.params.iter().find(|p| p.name == "n").expect("n param");
+        let n = build
+            .params
+            .iter()
+            .find(|p| p.name == "n")
+            .expect("n param");
         assert_eq!(n.ty.as_ref().unwrap().ty, "usize");
 
         // Declared return type, from the grammar's return_type field.
@@ -884,7 +935,11 @@ pub fn build(path: &str, n: usize) -> Csr {
         assert!(!ret.inferred);
 
         // `calls` holds call-position callees only — `read`/`parse`, not `data`.
-        assert!(build.calls.contains(&"read".to_string()), "calls: {:?}", build.calls);
+        assert!(
+            build.calls.contains(&"read".to_string()),
+            "calls: {:?}",
+            build.calls
+        );
         assert!(build.calls.contains(&"parse".to_string()));
         assert!(!build.calls.contains(&"data".to_string()));
 
@@ -926,7 +981,10 @@ def find_it(x):
 
         // Synthesised description only when there is no doc comment.
         let desc = synthesize_description(get, Some("accessor")).expect("description");
-        assert!(desc.contains("get_count") && desc.contains("accessor"), "{desc}");
+        assert!(
+            desc.contains("get_count") && desc.contains("accessor"),
+            "{desc}"
+        );
     }
 
     #[test]
@@ -964,7 +1022,8 @@ class Store:
     #[test]
     fn extracts_c_functions_and_structs_without_a_name_field() {
         let mut ex = SymbolExtractor::new().unwrap();
-        let src = "typedef struct Point { int x; } Point;\nint add(int a, int b) { return a + b; }\n";
+        let src =
+            "typedef struct Point { int x; } Point;\nint add(int a, int b) { return a + b; }\n";
         let syms = ex.extract("c", src);
         let add = find(&syms, "add");
         assert_eq!(add.kind, "fn");
@@ -995,7 +1054,8 @@ class Store:
     #[test]
     fn extracts_kotlin_functions_and_classes() {
         let mut ex = SymbolExtractor::new().unwrap();
-        let src = "fun parse(x: Int): Int { return x }\nclass Store { fun get(): Int = 1 }\nobject O\n";
+        let src =
+            "fun parse(x: Int): Int { return x }\nclass Store { fun get(): Int = 1 }\nobject O\n";
         let syms = ex.extract("kt", src);
         let parse = find(&syms, "parse");
         assert_eq!(parse.kind, "fn");
@@ -1029,10 +1089,20 @@ fn count(path: &str) -> usize {
 ";
         let syms = ex.extract("rs", src);
         let count = find(&syms, "count");
-        assert!(count.locals.contains(&"path".to_string()), "locals: {:?}", count.locals);
+        assert!(
+            count.locals.contains(&"path".to_string()),
+            "locals: {:?}",
+            count.locals
+        );
         assert!(count.locals.contains(&"total".to_string()));
-        assert!(!count.locals.contains(&"inner_only".to_string()), "nested leaked");
-        assert!(!count.locals.contains(&"read".to_string()), "call is not a local");
+        assert!(
+            !count.locals.contains(&"inner_only".to_string()),
+            "nested leaked"
+        );
+        assert!(
+            !count.locals.contains(&"read".to_string()),
+            "call is not a local"
+        );
     }
 
     #[test]
