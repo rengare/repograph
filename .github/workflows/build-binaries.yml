@@ -1,14 +1,64 @@
-name: Build Binaries
+name: Build & Release
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_release:
+        description: Cut a release even if this version already has one
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
+  # The release gate. `version` under [workspace.package] in Cargo.toml is the
+  # single source of truth: bump it on main and this workflow tags and releases.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Read `version` from the [workspace.package] table only — the
+          # [workspace.dependencies] table below it also contains version keys.
+          version=$(awk '
+            /^\[workspace\.package\]/ { in_table = 1; next }
+            /^\[/                     { in_table = 0 }
+            in_table && /^version[[:space:]]*=/ {
+              gsub(/^version[[:space:]]*=[[:space:]]*"|"[[:space:]]*$/, "")
+              print; exit
+            }' Cargo.toml)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # A pre-release identifier (0.2.0-rc.1) marks the release as such.
+          case "$version" in
+            *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          # Gate on the release existing rather than the tag: that is the thing
+          # we would actually be duplicating, and it needs no history fetch.
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$version already released; skipping release job." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "v$version is new; a release will be cut." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -35,6 +85,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Install Linux viewer dependencies
         if: runner.os == 'Linux'
@@ -58,3 +110,86 @@ jobs:
             target/release/rkg${{ matrix.suffix }}
             target/release/rkg-mcp${{ matrix.suffix }}
             target/release/graphvisualizer${{ matrix.suffix }}
+
+  # CycloneDX SBOM per workspace member. Only the four shipped ones reach a
+  # release, but generating all of them costs one `cargo metadata` call.
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx
+      # `--target all` takes the union of every platform-conditional dependency
+      # set, so one SBOM per crate covers all four release platforms plus wasm.
+      - run: cargo cyclonedx --format json --all --spec-version 1.5 --target all
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          if-no-files-found: error
+          path: crates/*/*.cdx.json
+
+  release:
+    needs: [version, build, sbom]
+    if: needs.version.outputs.release == 'true' || inputs.force_release
+    runs-on: ubuntu-latest
+    permissions:
+      # The only job in the repository with write access.
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Package release archives
+        run: |
+          set -euo pipefail
+          mkdir -p dist/sbom
+          out=$(pwd)/dist
+
+          # Every platform artifact contains files named rkg / rkg-mcp /
+          # graphvisualizer, so they must be archived per platform rather than
+          # flattened into one release.
+          for dir in artifacts/repograph-*; do
+            platform=${dir#artifacts/repograph-}
+            chmod +x "$dir"/* 2>/dev/null || true
+            case "$platform" in
+              windows-*) (cd "$dir" && zip -q -r "$out/repograph-$VERSION-$platform.zip" .) ;;
+              *)         tar -czf "dist/repograph-$VERSION-$platform.tar.gz" -C "$dir" . ;;
+            esac
+          done
+
+          # Ship SBOMs only for what users actually download.
+          for crate in rkg-cli rkg-mcp gv-app gv-web; do
+            cp "artifacts/sbom/$crate/$crate.cdx.json" "dist/sbom/$crate.cdx.json"
+          done
+
+          (cd dist && sha256sum repograph-* sbom/*.cdx.json > checksums.txt)
+          ls -la dist dist/sbom
+
+      # `gh` ships on the runner, so the one job holding `contents: write` runs
+      # no third-party action at all. `gh release create` also creates the tag
+      # at $GITHUB_SHA, so there is no separate tag push and no second run.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          shopt -s failglob   # an unmatched glob is a missing artifact, not a literal
+          files=(dist/repograph-* dist/checksums.txt dist/sbom/*.cdx.json)
+
+          args=(--target "$GITHUB_SHA" --title "v$VERSION" --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            # Only reachable via workflow_dispatch with force_release.
+            gh release upload "v$VERSION" "${files[@]}" --clobber
+          else
+            gh release create "v$VERSION" "${args[@]}" "${files[@]}"
+          fi

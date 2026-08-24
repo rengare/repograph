@@ -1,0 +1,13 @@
+# zizmor configuration. Run `uvx zizmor .` locally; CI runs it in
+# `.github/workflows/security.yml` and uploads SARIF to code scanning.
+
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # This repo pins actions by tag, not by commit SHA — a deliberate
+        # trade-off: tags stay readable and Dependabot keeps them current,
+        # at the cost of trusting the action owner not to move a tag.
+        # `ref-pin` still rejects a bare `owner/action` with no ref at all.
+        # Tighten to `hash-pin` if that trade-off is ever revisited.
+        "*": ref-pin

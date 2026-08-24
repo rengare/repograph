@@ -1,0 +1,203 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a newly published RustSec advisory surfaces without a push.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Dependency advisories, license policy, banned crates, and source registries.
+  # Split into one job per check so a license failure does not mask an advisory.
+  deny:
+    name: cargo-deny (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [advisories, licenses, bans, sources]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      # `--all-features` is already set via `[graph]` in deny.toml. cargo-deny
+      # exits non-zero on errors only, so the `bans` check — configured as
+      # `warn` — reports duplicates without failing the job.
+      - run: cargo deny --log-level info check ${{ matrix.check }}
+
+      # `needs.deny.result` only gives the matrix's aggregate verdict, so each
+      # leg records its own for the report job.
+      - name: Record check result
+        if: always()
+        env:
+          CHECK: ${{ matrix.check }}
+          STATUS: ${{ job.status }}
+        run: echo "$CHECK $STATUS" > "deny-$CHECK.txt"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: deny-status-${{ matrix.check }}
+          path: deny-${{ matrix.check }}.txt
+
+  # Clippy findings as SARIF, surfaced in the Security tab. Report-only: a lint
+  # regression should be visible on the PR, not a merge blocker.
+  clippy:
+    name: Clippy → code scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The egui/winit crates do not build without these; without a successful
+      # build there is no SARIF to upload.
+      - name: Install Linux viewer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libegl1-mesa-dev libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Not available via taiki-e/install-action; both are small crates, and
+      # rust-cache keeps ~/.cargo/bin warm after the first run.
+      - name: Install SARIF tooling
+        run: cargo install --locked clippy-sarif sarif-fmt
+
+      - name: Run clippy
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo clippy --locked --workspace --all-targets --message-format=json \
+            | clippy-sarif | tee clippy.sarif | sarif-fmt
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: clippy.sarif
+          category: clippy
+          wait-for-processing: true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: clippy-sarif
+          path: clippy.sarif
+          if-no-files-found: warn
+
+  # Static analysis of the workflow files themselves: over-broad permissions,
+  # template-injection sinks, artifact poisoning. Report-only.
+  zizmor:
+    name: zizmor (workflow audit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: zizmor
+
+      # Run the CLI rather than zizmor's action so the persona and SARIF
+      # handling stay explicit here. The pinning policy lives in zizmor.yml at
+      # the repo root.
+      - name: Run zizmor
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --persona=regular --format=sarif . > zizmor.sarif
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: zizmor-sarif
+          path: zizmor.sarif
+          if-no-files-found: warn
+
+  # Secret scanning over the full history. Blocking: a committed credential is a
+  # fact, not a style opinion.
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: gitleaks scans every commit, not just the tip.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Consolidates every scan into one markdown report: the run's job summary,
+  # plus a downloadable artifact. `if: always()` so a failed blocking check
+  # still produces a report explaining what failed.
+  report:
+    needs: [deny, clippy, zizmor, gitleaks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The inventory section reads `cargo metadata`; no build is needed.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Generate report
+        env:
+          DENY_RESULT: ${{ needs.deny.result }}
+          GITLEAKS_RESULT: ${{ needs.gitleaks.result }}
+        run: |
+          python3 .github/scripts/security_report.py \
+            --deny-status artifacts \
+            --clippy-sarif artifacts/clippy-sarif/clippy.sarif \
+            --zizmor-sarif artifacts/zizmor-sarif/zizmor.sarif \
+            --deny-result "$DENY_RESULT" \
+            --gitleaks-result "$GITLEAKS_RESULT" \
+            --commit "$GITHUB_SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --output security-report.md
+          cat security-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: security-report
+          path: security-report.md
+          if-no-files-found: error
