@@ -20,4 +20,4 @@ winit.workspace = true
 [dev-dependencies]
 # Validate the WGSL offline: shader compilation otherwise only happens when a
 # window builds the pipelines, which the headless tests never do.
-naga = { version = "29.0.4", features = ["wgsl-in"] }
+naga = { version = "30.0.0", features = ["wgsl-in"] }
