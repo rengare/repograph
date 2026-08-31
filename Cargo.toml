@@ -34,11 +34,11 @@ rkg-ingest = { path = "crates/rkg-ingest" }
 
 anyhow = "1.0.104"
 bytemuck = { version = "1.25.2", features = ["derive"] }
-egui = "0.35.0"
-egui-wgpu = { version = "0.35.0", features = ["winit", "x11", "wayland"] }
+egui = "0.36.1"
+egui-wgpu = { version = "0.36.1", features = ["winit", "x11", "wayland"] }
 # Default features pull `arboard` (clipboard), which does not compile on wasm.
 # gv-app re-enables clipboard for native targets only.
-egui-winit = { version = "0.35.0", default-features = false }
+egui-winit = { version = "0.36.1", default-features = false }
 env_logger = "0.11.11"
 glam = { version = "0.33.2", features = ["bytemuck"] }
 log = "0.4.33"
@@ -66,7 +66,7 @@ tree-sitter-c-sharp = "0.23"
 # means two incompatible sets of types, and the egui pass takes our encoder.
 # `fragile-send-sync-non-atomic-wasm` relaxes the Send bound on GPU handles for
 # the single-threaded browser; it has no effect on native.
-wgpu = { version = "29.0.4", features = ["fragile-send-sync-non-atomic-wasm"] }
+wgpu = { version = "30.0.0", features = ["fragile-send-sync-non-atomic-wasm"] }
 winit = "0.30.13"
 
 # Layout algorithms are unusable at interactive speed in a debug build; the
